@@ -490,6 +490,17 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
+  REFRESH_FOLDER_ACTION_ITEM: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("REFRESH_FOLDER_ACTION_ITEM"),
+    }),
+    response: successOrFailure(),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["sidepanel", "options"],
+    readiness: "control-ready",
+  }),
   GET_PERSISTENT_ERRORS: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),

@@ -1,3 +1,5 @@
+import { Settings } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -5,11 +7,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { t } from "@/src/runtime/i18n"
+import type { OptionsActionItemSeverity } from "@/src/runtime/options-action-items"
+import { cn } from "@/src/shared/utils"
 
 interface SidePanelHeaderProps {
   activeCount: number | null
   queuedCount: number | null
-  hasOptionsActionItems: boolean
+  optionsActionSeverity: OptionsActionItemSeverity | null
   onOpenSettings: () => void | Promise<void>
 }
 
@@ -21,12 +25,37 @@ export function formatSidePanelCount(count: number | null): string {
 export function SidePanelHeader({
   activeCount,
   queuedCount,
-  hasOptionsActionItems,
+  optionsActionSeverity,
   onOpenSettings,
 }: SidePanelHeaderProps) {
-  const settingsLabel = hasOptionsActionItems
+  const settingsLabel = optionsActionSeverity
     ? t("sidepanel_openOptionsActionItem")
     : t("sidepanel_openOptionsAdvanced")
+
+  const settingsButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="relative size-9 shrink-0"
+      onClick={onOpenSettings}
+      aria-label={settingsLabel}
+    >
+      <Settings aria-hidden="true" />
+      {optionsActionSeverity && (
+        <span
+          aria-hidden="true"
+          data-testid="options-action-indicator"
+          data-severity={optionsActionSeverity}
+          className={cn(
+            "absolute right-1.5 top-1.5 size-2 rounded-full ring-2 ring-background",
+            optionsActionSeverity === "error"
+              ? "bg-destructive"
+              : "bg-amber-500"
+          )}
+        />
+      )}
+    </Button>
+  )
 
   return (
     <header className="panel-status">
@@ -41,40 +70,18 @@ export function SidePanelHeader({
         </span>
       </div>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative size-9 shrink-0"
-            onClick={onOpenSettings}
-            aria-label={settingsLabel}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            >
-              <path d="M4 6h16M4 12h16M4 18h16" />
-              <path strokeWidth="3" d="M8 6h.1m7 6h.1m-5 6h.1" />
-            </svg>
-            {hasOptionsActionItems && (
-              <span
-                aria-hidden="true"
-                data-testid="options-action-indicator"
-                className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
-              />
-            )}
-          </Button>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{settingsButton}</TooltipTrigger>
         <TooltipContent side="bottom" className="text-sm">
-          {hasOptionsActionItems
-            ? t("sidepanel_settingsNeedAttention")
-            : t("sidepanel_settingsTooltip")}
+          {t(
+            optionsActionSeverity
+              ? "sidepanel_settingsNeedAttention"
+              : "sidepanel_settingsTooltip"
+          )}
         </TooltipContent>
       </Tooltip>
+      <span role="status" className="sr-only">
+        {optionsActionSeverity ? t("sidepanel_settingsNeedAttention") : ""}
+      </span>
     </header>
   )
 }

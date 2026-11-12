@@ -8,6 +8,8 @@ export const SESSION_STORAGE_KEYS = {
   initFailed: "initFailed",
   initError: "error",
   optionsActionItems: "optionsActionItems",
+  fsaDestinationActionItem: "fsaDestinationActionItem",
+  hostPermissionActionItem: "hostPermissionActionItem",
   providerNetworkPolicyContinuation: "providerNetworkPolicyContinuation",
 } as const
 

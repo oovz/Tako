@@ -106,29 +106,32 @@ describe("panel support views", () => {
 
   it("opens settings from its accessible header action and represents pending and bounded counts", async () => {
     const onOpenSettings = vi.fn()
-    const view = (hasOptionsActionItems: boolean, activeCount: number | null) =>
+    const view = (
+      optionsActionSeverity: "warning" | "error" | null,
+      activeCount: number | null
+    ) =>
       createElement(
         TooltipProvider,
         null,
         createElement(SidePanelHeader, {
           activeCount,
           queuedCount: 100,
-          hasOptionsActionItems,
+          optionsActionSeverity,
           onOpenSettings,
         })
       )
-    await act(async () => root.render(view(false, null)))
+    await act(async () => root.render(view(null, null)))
     expect(container.textContent).toContain("—")
     expect(container.textContent).toContain("99+")
     await act(async () =>
       container.querySelector<HTMLButtonElement>("button")!.click()
     )
     expect(onOpenSettings).toHaveBeenCalledOnce()
-    await act(async () => root.render(view(true, 1)))
+    await act(async () => root.render(view("warning", 1)))
     expect(
       container.querySelector("button")?.getAttribute("aria-label")
     ).toContain("Action item")
-    await act(async () => root.render(view(false, -1)))
+    await act(async () => root.render(view(null, -1)))
     expect(container.textContent).toContain("0")
   })
 

@@ -561,4 +561,27 @@ describe("Options host-permission and FSA controllers", () => {
       "second-id"
     )
   })
+
+  it("asks the background to refresh the badge after restoring folder access", async () => {
+    const { loadDownloadRootHandle, verifyPermission } =
+      await import("@/src/storage/fs-access")
+    const handle = { name: "downloads" } as FileSystemDirectoryHandle
+    vi.mocked(loadDownloadRootHandle).mockResolvedValueOnce(handle)
+    const permission = Promise.withResolvers<boolean>()
+    vi.mocked(verifyPermission).mockReturnValueOnce(permission.promise)
+    const sendMessage = vi.fn().mockResolvedValue({ success: true })
+    vi.stubGlobal("chrome", { runtime: { sendMessage } })
+    try {
+      const grant = new OptionsFsaController().grantSavedAccess("saved-folder")
+      expect(sendMessage).not.toHaveBeenCalled()
+      permission.resolve(true)
+      await expect(grant).resolves.toEqual({ status: "granted", handle })
+      expect(sendMessage).toHaveBeenCalledWith({
+        target: "background",
+        type: "REFRESH_FOLDER_ACTION_ITEM",
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

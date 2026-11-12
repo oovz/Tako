@@ -11,6 +11,7 @@ import {
 import { validateBackgroundSiteIntegrations } from "@/src/runtime/background-site-integration-initialization"
 import { setEnablementMap } from "@/src/site-integrations/catalog"
 import { reconcileOptionalHostPermissionEnablement } from "@/src/site-integrations/host-permission-service"
+import { reconcileHostPermissionActionItem } from "@/entrypoints/background/options-action-item-reconcile"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -181,9 +182,13 @@ export class BackgroundRuntimeKernel {
 
     const attempt = (async () => {
       try {
-        const { enablement } = await reconcileOptionalHostPermissionEnablement(
-          this.input.siteIntegrationEnablementService
-        )
+        const { enablement, disabledIntegrationIds } =
+          await reconcileOptionalHostPermissionEnablement(
+            this.input.siteIntegrationEnablementService
+          )
+        // Projection writes must not hold up integration readiness. Record any
+        // sites this attempt disabled even if another generation superseded it.
+        void reconcileHostPermissionActionItem(disabledIntegrationIds)
         if (this.integrationPhase !== phase) {
           await this.ensureIntegrationsReady()
           return

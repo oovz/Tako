@@ -27,6 +27,11 @@ import {
 import { registerSiteIntegrationEnablementListener } from "@/src/runtime/site-integration-initialization"
 import { getDefinition } from "@/src/site-integrations/catalog"
 import { includesManagedHostPermission } from "@/src/site-integrations/host-permission-service"
+import {
+  reconcileFsaDestinationActionItem,
+  reconcileHostPermissionActionItem,
+} from "@/entrypoints/background/options-action-item-reconcile"
+import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
@@ -301,15 +306,25 @@ export default defineBackground({
 
     chrome.runtime.onMessage.addListener(backgroundRuntimeMessageListener)
     settingsSubscriber.register()
+    const refreshFolderActionItem = () => {
+      void runtimeKernel
+        .ensure("control-ready")
+        .then(() => reconcileFsaDestinationActionItem({ settingsRepository }))
+        .catch((error) =>
+          logger.warn("Failed to refresh folder indicator", error)
+        )
+    }
     registerHistoryRepositoryListener(historyRepository)
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return
-      if (
-        Object.hasOwn(changes, "settings:global") ||
-        Object.hasOwn(changes, "siteOverrides")
-      ) {
+      const settingsChanged = Object.hasOwn(
+        changes,
+        SETTINGS_STORAGE_KEYS.global
+      )
+      if (settingsChanged || Object.hasOwn(changes, "siteOverrides")) {
         rateLimitService.cleanupRateLimiters()
       }
+      if (settingsChanged) refreshFolderActionItem()
     })
     registerSiteIntegrationEnablementListener(siteIntegrationEnablementService)
 
@@ -382,6 +397,11 @@ export default defineBackground({
       })
     })
 
+    chrome.permissions.onAdded.addListener((permissions) => {
+      if (!includesManagedHostPermission(permissions)) return
+      void reconcileHostPermissionActionItem()
+    })
+
     siteIntegrationSessionRuleManager.registerListeners()
 
     const initialSessionRuleReconciliation =
@@ -392,6 +412,7 @@ export default defineBackground({
 
     runtimeKernel.markControlReady()
     runtimeKernel.start()
+    refreshFolderActionItem()
 
     logger.info("Background script initialized")
   },

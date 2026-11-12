@@ -4,6 +4,7 @@ import {
   verifyPermission,
   type DirHandle,
 } from "@/src/storage/fs-access"
+import { refreshFolderActionItem } from "@/src/runtime/refresh-folder-action-item"
 
 type DirectoryPicker = () => Promise<FileSystemDirectoryHandle>
 
@@ -59,6 +60,7 @@ export class OptionsFsaController {
     const handle = await this.loadSaved(handleId)
     if (!handle) return { status: "missing" }
     if (!(await verifyPermission(handle, true))) return { status: "denied" }
+    void refreshFolderActionItem()
     return { status: "granted", handle }
   }
 }

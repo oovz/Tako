@@ -10,7 +10,10 @@ import {
 import {
   clearExtensionUpdateActionItem,
   markExtensionUpdateActionItemAvailable,
+  parseOptionsActionItems,
 } from "@/src/runtime/options-action-items"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 
 async function synchronizeUpdateActionItem(
   result: ChromeWebStoreUpdateCheckResult
@@ -34,6 +37,13 @@ export function useExtensionUpdateState() {
   const [lastResult, setLastResult] =
     useState<ChromeWebStoreUpdateCheckResult | null>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const { value: actionItems } = useChromeStorageValue({
+    areaName: "session",
+    key: SESSION_STORAGE_KEYS.optionsActionItems,
+    initialValue: {},
+    parse: parseOptionsActionItems,
+  })
+  const pendingUpdate = actionItems.extensionUpdate
 
   useEffect(() => {
     const runtime = getDefaultExtensionUpdateRuntime()
@@ -77,7 +87,17 @@ export function useExtensionUpdateState() {
 
   return {
     currentVersion,
-    lastResult,
+    lastResult:
+      lastResult ??
+      (pendingUpdate
+        ? {
+            ok: true as const,
+            status: "update_available" as const,
+            currentVersion,
+            availableVersion: pendingUpdate.version,
+            checkedAt: pendingUpdate.detectedAt,
+          }
+        : null),
     isChecking,
     handleCheckForUpdates,
     handleApplyUpdate,

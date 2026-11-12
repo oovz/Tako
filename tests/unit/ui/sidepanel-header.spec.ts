@@ -7,8 +7,11 @@ import {
   formatSidePanelCount,
   SidePanelHeader,
 } from "@/entrypoints/sidepanel/components/SidePanelHeader"
+import type { OptionsActionItemSeverity } from "@/src/runtime/options-action-items"
 
-function renderHeader(hasOptionsActionItems: boolean): string {
+function renderHeader(
+  optionsActionSeverity: OptionsActionItemSeverity | null
+): string {
   return renderToStaticMarkup(
     React.createElement(
       TooltipProvider,
@@ -16,7 +19,7 @@ function renderHeader(hasOptionsActionItems: boolean): string {
       React.createElement(SidePanelHeader, {
         activeCount: 0,
         queuedCount: 0,
-        hasOptionsActionItems,
+        optionsActionSeverity,
         onOpenSettings: () => undefined,
       })
     )
@@ -32,16 +35,24 @@ describe("SidePanelHeader options action indicator", () => {
   })
 
   it("renders the settings gear without an action indicator by default", () => {
-    const html = renderHeader(false)
+    const html = renderHeader(null)
 
     expect(html).toContain('aria-label="Open Options (Advanced Settings)"')
     expect(html).not.toContain('data-testid="options-action-indicator"')
   })
 
-  it("renders an accessible action indicator on the settings gear", () => {
-    const html = renderHeader(true)
+  it("renders a warning indicator on the settings gear for warning items", () => {
+    const html = renderHeader("warning")
 
     expect(html).toContain('aria-label="Open Options (Action item available)"')
-    expect(html).toContain('data-testid="options-action-indicator"')
+    expect(html).toContain('data-severity="warning"')
+    expect(html).toContain("bg-amber-500")
+  })
+
+  it("renders an error indicator on the settings gear for error items", () => {
+    const html = renderHeader("error")
+
+    expect(html).toContain('data-severity="error"')
+    expect(html).toContain("bg-destructive")
   })
 })

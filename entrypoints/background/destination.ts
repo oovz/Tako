@@ -48,21 +48,26 @@ export class DestinationPreflightError extends Error {
 
 export class DestinationService {
   async preflight(context: DestinationContext): Promise<DestinationPreflight> {
-    const destination = context.destination
-    if (destination.kind === "downloads-api") return { ready: true }
-    if (destination.handleId === null)
-      return { ready: false, reason: "not_configured" }
-    try {
-      const handle = await loadDownloadRootHandle(destination.handleId)
-      if (!handle) return { ready: false, reason: "not_configured" }
-      const permission = await queryFsaPermission(handle, true)
-      return destinationPermissionResult(permission)
-    } catch (error) {
-      return {
-        ready: false,
-        reason: "folder_unavailable",
-        message: error instanceof Error ? error.message : String(error),
-      }
+    return checkDestinationHealth(context.destination)
+  }
+}
+
+export async function checkDestinationHealth(
+  destination: TaskDestination
+): Promise<DestinationPreflight> {
+  if (destination.kind === "downloads-api") return { ready: true }
+  if (destination.handleId === null)
+    return { ready: false, reason: "not_configured" }
+  try {
+    const handle = await loadDownloadRootHandle(destination.handleId)
+    if (!handle) return { ready: false, reason: "not_configured" }
+    const permission = await queryFsaPermission(handle, true)
+    return destinationPermissionResult(permission)
+  } catch (error) {
+    return {
+      ready: false,
+      reason: "folder_unavailable",
+      message: error instanceof Error ? error.message : String(error),
     }
   }
 }

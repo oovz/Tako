@@ -44,7 +44,10 @@ beforeEach(() => {
         ) => listeners.delete(listener),
       },
     },
-    storage: { session: { get: async () => ({ ...stored }), set } },
+    storage: {
+      session: { get: async () => ({ ...stored }), set },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
   })
   container = document.createElement("div")
   document.body.append(container)
@@ -96,6 +99,15 @@ it("handles runtime update events and removes its subscription on unmount", asyn
   })
   await act(async () => root.unmount())
   expect(listeners.size).toBe(0)
+})
+
+it("shows Apply Update when opening Settings after Chrome reported an update", async () => {
+  stored[SESSION_STORAGE_KEYS.optionsActionItems] = {
+    extensionUpdate: { status: "available", version: "2.2.0", detectedAt: 1 },
+  }
+  await act(async () => root.render(createElement(ExtensionUpdateSection)))
+  expect(button("options_applyUpdate").disabled).toBe(false)
+  expect(requestUpdateCheck).not.toHaveBeenCalled()
 })
 
 it.each([

@@ -1,12 +1,14 @@
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
 import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
+import { reconcileFsaDestinationActionItem } from "./options-action-item-reconcile"
 
 type SettingsUiMessageType =
   | "GET_SITE_INTEGRATION_ENABLEMENT"
   | "GET_OPTIONS_CONFIGURATION"
   | "SAVE_OPTIONS_CONFIGURATION"
   | "GET_UI_PREFERENCES"
+  | "REFRESH_FOLDER_ACTION_ITEM"
   | "GET_PERSISTENT_ERRORS"
   | "CLEAR_PERSISTED_DOWNLOAD_HISTORY"
   | "ACKNOWLEDGE_ERROR"
@@ -35,6 +37,12 @@ export function createBackgroundSettingsUiMessageHandlers(
           uiLanguage: settings.uiLanguage,
         },
       }
+    },
+    REFRESH_FOLDER_ACTION_ITEM: async () => {
+      await reconcileFsaDestinationActionItem({
+        settingsRepository: deps.settingsRepository,
+      })
+      return { success: true }
     },
     GET_PERSISTENT_ERRORS: async () => ({
       success: true,

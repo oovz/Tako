@@ -156,10 +156,11 @@ export async function reconcileOptionalHostPermissionEnablement(
 ): Promise<{
   changed: boolean
   enablement: SiteIntegrationEnablementMap
+  disabledIntegrationIds: string[]
 }> {
   const current = await service.getAll()
   const next = { ...current }
-  let changed = false
+  const disabledIntegrationIds: string[] = []
 
   for (const definition of getDefinitions()) {
     if (
@@ -172,10 +173,10 @@ export async function reconcileOptionalHostPermissionEnablement(
 
     if (await hasIntegrationOptionalHostPermission(definition.id)) continue
     next[definition.id] = false
-    changed = true
+    disabledIntegrationIds.push(definition.id)
   }
 
-  if (changed) {
+  if (disabledIntegrationIds.length > 0) {
     await service.setAll(next)
     logger.warn(
       "Disabled site integrations whose optional host permissions are missing"
@@ -183,7 +184,9 @@ export async function reconcileOptionalHostPermissionEnablement(
   }
 
   try {
-    await removeUnusedHostPermissions(changed ? next : current)
+    await removeUnusedHostPermissions(
+      disabledIntegrationIds.length > 0 ? next : current
+    )
   } catch (error) {
     logger.warn(
       "Failed to remove unused optional site integration host permissions",
@@ -191,5 +194,9 @@ export async function reconcileOptionalHostPermissionEnablement(
     )
   }
 
-  return { changed, enablement: next }
+  return {
+    changed: disabledIntegrationIds.length > 0,
+    enablement: next,
+    disabledIntegrationIds,
+  }
 }

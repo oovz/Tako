@@ -7,9 +7,31 @@ export interface ExtensionUpdateActionItem {
   detectedAt: number
 }
 
+export type FsaDestinationIssue = "permission_required" | "unavailable"
+
+export interface FsaDestinationActionItem {
+  issue: FsaDestinationIssue
+  detectedAt: number
+}
+
+export interface HostPermissionActionItem {
+  integrationIds: string[]
+  detectedAt: number
+}
+
 export interface OptionsActionItems {
   extensionUpdate?: ExtensionUpdateActionItem
+  fsaDestination?: FsaDestinationActionItem
+  hostPermission?: HostPermissionActionItem
 }
+
+export type OptionsActionItemSeverity = "warning" | "error"
+
+export const OPTIONS_ACTION_ITEM_KEYS = [
+  SESSION_STORAGE_KEYS.optionsActionItems,
+  SESSION_STORAGE_KEYS.fsaDestinationActionItem,
+  SESSION_STORAGE_KEYS.hostPermissionActionItem,
+]
 
 interface CreateExtensionUpdateActionItemInput {
   version?: string
@@ -23,6 +45,14 @@ interface PersistOptionsActionItemsInput {
 
 interface ExtensionUpdatePersistenceInput extends PersistOptionsActionItemsInput {
   version?: string
+}
+
+interface FsaDestinationPersistenceInput extends PersistOptionsActionItemsInput {
+  issue: FsaDestinationIssue
+}
+
+interface HostPermissionPersistenceInput extends PersistOptionsActionItemsInput {
+  integrationIds: string[]
 }
 
 function getSessionStorageArea():
@@ -47,42 +77,115 @@ export function createExtensionUpdateActionItem({
   }
 }
 
+function parseExtensionUpdateActionItem(
+  raw: unknown
+): ExtensionUpdateActionItem | undefined {
+  if (
+    !isRecord(raw) ||
+    raw.status !== "available" ||
+    typeof raw.detectedAt !== "number"
+  ) {
+    return undefined
+  }
+  return {
+    status: "available",
+    ...(typeof raw.version === "string" && raw.version
+      ? { version: raw.version }
+      : {}),
+    detectedAt: raw.detectedAt,
+  }
+}
+
+function parseFsaDestinationActionItem(
+  raw: unknown
+): FsaDestinationActionItem | undefined {
+  if (
+    !isRecord(raw) ||
+    (raw.issue !== "permission_required" && raw.issue !== "unavailable") ||
+    typeof raw.detectedAt !== "number"
+  ) {
+    return undefined
+  }
+  return { issue: raw.issue, detectedAt: raw.detectedAt }
+}
+
+function parseHostPermissionActionItem(
+  raw: unknown
+): HostPermissionActionItem | undefined {
+  if (
+    !isRecord(raw) ||
+    !Array.isArray(raw.integrationIds) ||
+    !raw.integrationIds.every((id) => typeof id === "string") ||
+    typeof raw.detectedAt !== "number"
+  ) {
+    return undefined
+  }
+  return {
+    integrationIds: raw.integrationIds,
+    detectedAt: raw.detectedAt,
+  }
+}
+
 export function parseOptionsActionItems(raw: unknown): OptionsActionItems {
   if (!isRecord(raw)) {
     return {}
   }
 
-  const rawUpdate = raw.extensionUpdate
+  const items: OptionsActionItems = {}
+  const extensionUpdate = parseExtensionUpdateActionItem(raw.extensionUpdate)
+  if (extensionUpdate) items.extensionUpdate = extensionUpdate
+  const fsaDestination = parseFsaDestinationActionItem(raw.fsaDestination)
+  if (fsaDestination) items.fsaDestination = fsaDestination
+  const hostPermission = parseHostPermissionActionItem(raw.hostPermission)
+  if (hostPermission) items.hostPermission = hostPermission
+  return items
+}
+
+export function parseStoredOptionsActionItems(
+  raw: unknown
+): OptionsActionItems {
+  if (!isRecord(raw)) return {}
+
+  const update = raw[SESSION_STORAGE_KEYS.optionsActionItems]
+  return parseOptionsActionItems({
+    extensionUpdate: isRecord(update) ? update.extensionUpdate : undefined,
+    fsaDestination: raw[SESSION_STORAGE_KEYS.fsaDestinationActionItem],
+    hostPermission: raw[SESSION_STORAGE_KEYS.hostPermissionActionItem],
+  })
+}
+
+export function getOptionsActionItemSeverity(
+  items: OptionsActionItems
+): OptionsActionItemSeverity | null {
+  if (items.fsaDestination?.issue === "unavailable") return "error"
   if (
-    !isRecord(rawUpdate) ||
-    rawUpdate.status !== "available" ||
-    typeof rawUpdate.detectedAt !== "number"
+    items.fsaDestination ||
+    items.extensionUpdate ||
+    items.hostPermission?.integrationIds.length
   ) {
-    return {}
+    return "warning"
   }
-
-  return {
-    extensionUpdate: {
-      status: "available",
-      ...(typeof rawUpdate.version === "string" && rawUpdate.version
-        ? { version: rawUpdate.version }
-        : {}),
-      detectedAt: rawUpdate.detectedAt,
-    },
-  }
+  return null
 }
 
-export function hasOptionsActionItems(items: OptionsActionItems): boolean {
-  return items.extensionUpdate?.status === "available"
+export async function readHostPermissionActionItem(): Promise<
+  HostPermissionActionItem | undefined
+> {
+  const storageArea = getSessionStorageArea()
+  if (!storageArea) return undefined
+  const key = SESSION_STORAGE_KEYS.hostPermissionActionItem
+  const result = await storageArea.get(key)
+  return parseHostPermissionActionItem(result[key])
 }
 
-async function readOptionsActionItems(
-  storageArea: Pick<chrome.storage.StorageArea, "get">
-): Promise<OptionsActionItems> {
-  const result = await storageArea.get(SESSION_STORAGE_KEYS.optionsActionItems)
-  return parseOptionsActionItems(
-    result[SESSION_STORAGE_KEYS.optionsActionItems]
-  )
+// Keep each source in its own key. Options and the worker can update these
+// independently, without a cross-context read/modify/write of the same value.
+async function writeActionItem(
+  key: (typeof OPTIONS_ACTION_ITEM_KEYS)[number],
+  value: unknown,
+  storageArea: Pick<chrome.storage.StorageArea, "set"> | undefined
+): Promise<void> {
+  await storageArea?.set({ [key]: value })
 }
 
 export async function markExtensionUpdateActionItemAvailable({
@@ -90,30 +193,64 @@ export async function markExtensionUpdateActionItemAvailable({
   storageArea = getSessionStorageArea(),
   now = Date.now,
 }: ExtensionUpdatePersistenceInput = {}): Promise<void> {
-  if (!storageArea) {
-    return
-  }
-
-  const current = await readOptionsActionItems(storageArea)
-  await storageArea.set({
-    [SESSION_STORAGE_KEYS.optionsActionItems]: {
-      ...current,
-      ...createExtensionUpdateActionItem({ version, detectedAt: now() }),
-    },
-  })
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.optionsActionItems,
+    createExtensionUpdateActionItem({ version, detectedAt: now() }),
+    storageArea
+  )
 }
 
 export async function clearExtensionUpdateActionItem({
   storageArea = getSessionStorageArea(),
 }: PersistOptionsActionItemsInput = {}): Promise<void> {
-  if (!storageArea) {
-    return
-  }
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.optionsActionItems,
+    {},
+    storageArea
+  )
+}
 
-  const current = await readOptionsActionItems(storageArea)
-  const remaining = { ...current }
-  delete remaining.extensionUpdate
-  await storageArea.set({
-    [SESSION_STORAGE_KEYS.optionsActionItems]: remaining,
-  })
+export async function markFsaDestinationActionItem({
+  issue,
+  storageArea = getSessionStorageArea(),
+  now = Date.now,
+}: FsaDestinationPersistenceInput): Promise<void> {
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.fsaDestinationActionItem,
+    { issue, detectedAt: now() },
+    storageArea
+  )
+}
+
+export async function clearFsaDestinationActionItem({
+  storageArea = getSessionStorageArea(),
+}: PersistOptionsActionItemsInput = {}): Promise<void> {
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.fsaDestinationActionItem,
+    null,
+    storageArea
+  )
+}
+
+export async function markHostPermissionActionItem({
+  integrationIds,
+  storageArea = getSessionStorageArea(),
+  now = Date.now,
+}: HostPermissionPersistenceInput): Promise<void> {
+  if (integrationIds.length === 0) return
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.hostPermissionActionItem,
+    { integrationIds: [...new Set(integrationIds)].sort(), detectedAt: now() },
+    storageArea
+  )
+}
+
+export async function clearHostPermissionActionItem({
+  storageArea = getSessionStorageArea(),
+}: PersistOptionsActionItemsInput = {}): Promise<void> {
+  await writeActionItem(
+    SESSION_STORAGE_KEYS.hostPermissionActionItem,
+    null,
+    storageArea
+  )
 }

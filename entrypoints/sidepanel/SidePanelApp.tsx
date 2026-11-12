@@ -4,7 +4,7 @@ import { t } from "@/src/runtime/i18n"
 import { useActiveTaskProgress } from "./hooks/useActiveTaskProgress"
 import { useCommandCenterActions } from "./hooks/useCommandCenterActions"
 import { useInlineSelectionState } from "./hooks/useInlineSelectionState"
-import { useOptionsActionItems } from "./hooks/useOptionsActionItems"
+import { useOptionsActionItemSeverity } from "./hooks/useOptionsActionItemSeverity"
 import { useQueueView } from "./hooks/useQueueView"
 import { useSidepanelSeriesContext } from "./hooks/useSidepanelSeriesContext"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -37,7 +37,7 @@ function PanelContent() {
   const actions = useCommandCenterActions()
   const queue = useQueueView()
   const { progress } = useActiveTaskProgress()
-  const hasOptionsActionItems = useOptionsActionItems()
+  const optionsActionSeverity = useOptionsActionItemSeverity()
   const [view, setView] = useState<PanelView>("queue")
   const queueTab = useRef<HTMLButtonElement>(null)
   const navigation = useRef<HTMLElement>(null)
@@ -77,7 +77,7 @@ function PanelContent() {
       <SidePanelHeader
         activeCount={available ? queue.activeCount : null}
         queuedCount={available ? queue.queuedCount : null}
-        hasOptionsActionItems={hasOptionsActionItems}
+        optionsActionSeverity={optionsActionSeverity}
         onOpenSettings={actions.openSettings}
       />
       <nav

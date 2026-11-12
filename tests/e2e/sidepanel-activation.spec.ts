@@ -4,9 +4,14 @@ import {
   seedTabContext,
   openSidepanelHarness,
   openSidepanelViaChromeApi,
+  setLocalState,
   setSessionState,
 } from "./fixtures/state-helpers"
-import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import {
+  SESSION_STORAGE_KEYS,
+  SETTINGS_STORAGE_KEYS,
+} from "@/src/runtime/storage-keys"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import {
   MANGADEX_TEST_SERIES_URL,
   buildExampleUrl,
@@ -168,13 +173,18 @@ test.describe("Side Panel activation", () => {
     await sp.close()
   })
 
-  test("marks the settings button when an update needs attention", async ({
+  test("updates the focused settings button when an update appears and clears", async ({
     context,
     extensionId,
     page,
   }) => {
     await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
     await getTabId(page, context)
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    const settings = sp.getByRole("button", { name: /^Open Options/ })
+    await settings.focus()
+    await expect(settings).toBeFocused()
+
     await setSessionState(context, SESSION_STORAGE_KEYS.optionsActionItems, {
       extensionUpdate: {
         status: "available",
@@ -183,17 +193,18 @@ test.describe("Side Panel activation", () => {
       },
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
-    await expect(sp.locator("#root")).toBeVisible()
     await expect(
       sp.getByRole("button", { name: "Open Options (Action item available)" })
-    ).toBeVisible()
-    await expect(
-      sp.locator('[data-testid="options-action-indicator"]')
-    ).toBeVisible()
+    ).toBeFocused()
+    const indicator = sp.getByTestId("options-action-indicator")
+    await expect(indicator).toBeVisible()
     await expect(sp.getByRole("button", { name: "Apply Update" })).toHaveCount(
       0
     )
+
+    await setSessionState(context, SESSION_STORAGE_KEYS.optionsActionItems, {})
+    await expect(indicator).toHaveCount(0)
+    await expect(settings).toBeFocused()
     await sp.close()
   })
   test("opens Options from the settings button", async ({
@@ -225,6 +236,35 @@ test.describe("Side Panel activation", () => {
 
     await sp.close()
     await optionsPage.close()
+  })
+
+  test("shows an unavailable folder above an update and keeps the update when the destination changes", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    const indicator = sp.getByTestId("options-action-indicator")
+    await setSessionState(context, SESSION_STORAGE_KEYS.optionsActionItems, {
+      extensionUpdate: { status: "available", detectedAt: Date.now() },
+    })
+    await expect(indicator).toHaveAttribute("data-severity", "warning")
+
+    const settings = { ...DEFAULT_SETTINGS, uiLanguage: "en" }
+    await setLocalState(context, SETTINGS_STORAGE_KEYS.global, {
+      ...settings,
+      downloads: {
+        ...settings.downloads,
+        destination: "file-system-access",
+        customDirectoryHandleId: "missing-folder",
+      },
+    })
+    await expect(indicator).toHaveAttribute("data-severity", "error")
+
+    await setLocalState(context, SETTINGS_STORAGE_KEYS.global, settings)
+    await expect(indicator).toHaveAttribute("data-severity", "warning")
+    await sp.close()
   })
 
   test("shows unsupported message on about:blank", async ({

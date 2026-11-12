@@ -92,6 +92,7 @@ describe("site integration optional host permissions", () => {
     ).resolves.toEqual({
       changed: true,
       enablement: { mangadex: false },
+      disabledIntegrationIds: ["mangadex"],
     })
     expect(storageMocks.setAll).toHaveBeenCalledWith({ mangadex: false })
   })
@@ -105,6 +106,7 @@ describe("site integration optional host permissions", () => {
     ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: true },
+      disabledIntegrationIds: [],
     })
     expect(storageMocks.setAll).not.toHaveBeenCalled()
   })
@@ -119,6 +121,7 @@ describe("site integration optional host permissions", () => {
     ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: false },
+      disabledIntegrationIds: [],
     })
     expect(remove).toHaveBeenCalledWith({
       origins: getIntegrationOptionalHostPermissionOrigins("mangadex"),

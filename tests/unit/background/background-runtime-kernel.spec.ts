@@ -22,10 +22,12 @@ const mocks = vi.hoisted(() => ({
     () => Promise<{
       changed: boolean
       enablement: Record<string, boolean>
+      disabledIntegrationIds: string[]
     }>
   >(async () => ({
     changed: false,
     enablement: { mangadex: true },
+    disabledIntegrationIds: [],
   })),
   initializeMetadata: vi.fn(async () => undefined),
   applyEnablement: vi.fn(),
@@ -185,11 +187,13 @@ describe("BackgroundRuntimeKernel", () => {
     mocks.reconcilePermission.mockResolvedValue({
       changed: false,
       enablement: { mangadex: true },
+      disabledIntegrationIds: [],
     })
     mocks.initializeFromStorage.mockResolvedValue({ queue: [] })
+    const sessionGet = vi.fn(async () => ({}))
     sessionSet = vi.fn(async () => undefined)
     vi.stubGlobal("chrome", {
-      storage: { session: { set: sessionSet } },
+      storage: { session: { get: sessionGet, set: sessionSet } },
     } as unknown as typeof chrome)
   })
 
@@ -448,12 +452,14 @@ describe("BackgroundRuntimeKernel", () => {
     const oldGeneration = deferred<{
       changed: boolean
       enablement: Record<string, boolean>
+      disabledIntegrationIds: string[]
     }>()
     mocks.reconcilePermission
       .mockReturnValueOnce(oldGeneration.promise)
       .mockResolvedValueOnce({
         changed: false,
         enablement: { mangadex: false },
+        disabledIntegrationIds: [],
       })
     const { kernel } = createKernel()
 
@@ -468,6 +474,7 @@ describe("BackgroundRuntimeKernel", () => {
     oldGeneration.resolve({
       changed: false,
       enablement: { mangadex: true },
+      disabledIntegrationIds: [],
     })
     await Promise.all([initial, refresh])
 
@@ -482,6 +489,7 @@ describe("BackgroundRuntimeKernel", () => {
     const refreshGate = deferred<{
       changed: boolean
       enablement: Record<string, boolean>
+      disabledIntegrationIds: string[]
     }>()
     mocks.reconcilePermission.mockReturnValueOnce(refreshGate.promise)
 
@@ -494,7 +502,11 @@ describe("BackgroundRuntimeKernel", () => {
     await Promise.resolve()
     expect(runtimeResolved).toBe(false)
 
-    refreshGate.resolve({ changed: false, enablement: { mangadex: true } })
+    refreshGate.resolve({
+      changed: false,
+      enablement: { mangadex: true },
+      disabledIntegrationIds: [],
+    })
     await Promise.all([refresh, runtime])
     expect(nativeOutputCoordinator.initialize).toHaveBeenCalledOnce()
     expect(mocks.initializeFromStorage).toHaveBeenCalledOnce()
@@ -601,11 +613,13 @@ describe("BackgroundRuntimeKernel", () => {
     const refreshGate = deferred<{
       changed: boolean
       enablement: Record<string, boolean>
+      disabledIntegrationIds: string[]
     }>()
     mocks.reconcilePermission
       .mockResolvedValueOnce({
         changed: false,
         enablement: { mangadex: true },
+        disabledIntegrationIds: [],
       })
       .mockReturnValueOnce(refreshGate.promise)
     mocks.initializeFromStorage.mockResolvedValueOnce({
@@ -634,6 +648,7 @@ describe("BackgroundRuntimeKernel", () => {
     refreshGate.resolve({
       changed: false,
       enablement: { mangadex: false },
+      disabledIntegrationIds: [],
     })
     await refreshPromise
     await vi.waitFor(() => expect(mocks.processQueue).toHaveBeenCalledOnce())
