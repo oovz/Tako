@@ -35,6 +35,10 @@ const secondaryReaderHtml = readFileSync(
   resolve("tests/fixtures/site-integrations/mangago/reader-kenshi.html"),
   "utf8"
 )
+const ultraBlackSeriesHtml = readFileSync(
+  resolve("tests/fixtures/site-integrations/mangago/series-ultra-black.html"),
+  "utf8"
+)
 function documentFor(html: string): Document {
   const window = new Window()
   window.document.body.innerHTML = html
@@ -93,6 +97,37 @@ describe("Mangago content contracts", () => {
     expect(chapters.map((chapter) => chapter.id)).toContain(
       "an:hunter-x-hunter/364.1"
     )
+  })
+  it("keeps Ultra Black's numbered chapters distinct within a volume", () => {
+    const seriesUrl = "https://www.mangago.me/read-manga/000000_ultra_black/"
+    const result = parseMangagoSeries(
+      documentFor(ultraBlackSeriesHtml),
+      seriesUrl
+    )
+    const chapters =
+      result.chapterList && !Array.isArray(result.chapterList)
+        ? result.chapterList.chapters
+        : []
+    expect(chapters).toHaveLength(21)
+    expect(chapters.slice(0, 3)).toMatchObject([
+      { id: "mf:v01/c001", chapterNumber: 1, volumeNumber: 1 },
+      { id: "mf:v01/c002", chapterNumber: 2, volumeNumber: 1 },
+      { id: "mf:v01/c003", chapterNumber: 3, volumeNumber: 1 },
+    ])
+  })
+  it("keeps the same Ultra Black chapter identity across numbered reader pages", () => {
+    const chapterUrl =
+      "https://www.mangago.me/read-manga/000000_ultra_black/mf/v01/c001/"
+    const reader = parseMangagoReader(
+      documentFor(`
+        <input id="curl" value="/mf/v01/c001/{page}/">
+        <script src="https://pic1.mangapicgallery.com/js/chapter.js?895"></script>
+        <script>var current_page=1; var total_pages=43; var imgsrcs="YWJjZA==";</script>
+      `),
+      chapterUrl
+    )
+    expect(reader.pageUrl(2)).toBe(`${chapterUrl}2/`)
+    expect(parseMangagoUrl(reader.pageUrl(2)).chapterId).toBe("mf:v01/c001")
   })
   it("keeps chapter identities stable across the observed bare and www hosts", () => {
     expect(

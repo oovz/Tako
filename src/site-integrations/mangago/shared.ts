@@ -39,6 +39,12 @@ function parseChapterPath(path: string, pathname: string): string {
       )
     return chapterPath
   }
+  // Ultra Black uses v01/c001/ for the chapter and v01/c001/2/ for page 2.
+  const volumeChapter = path.match(
+    /^(v\d+\/c\d+(?:\.\d+)?)(?:\/[1-9]\d*)?$/i
+  )?.[1]
+  if (volumeChapter) return volumeChapter
+
   // Older single-key chapters can end in .html or carry a display alias.
   if (
     parts.length > 2 ||

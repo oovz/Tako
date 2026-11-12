@@ -6,4 +6,6 @@
 
 The community score and synopsis expand control in `series-kenshi.html` were captured on 2026-11-12. The fixture preserves the site's displayed release year.
 
+`series-ultra-black.html` retains the 21 catalog links and displayed year from [#000000 - Ultra Black](https://www.mangago.me/read-manga/000000_ultra_black/), captured on 2026-11-12. Chapters 1–3 use separate volume and chapter segments. Their readers use a numeric page suffix, as in `/mf/v01/c001/2/`.
+
 The captures retain older HTML links, nested routes, and fractional chapter labels. Account state and unrelated page content have been removed. Browser tests use generated PNG images; no chapter artwork is stored.
