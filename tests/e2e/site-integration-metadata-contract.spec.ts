@@ -155,7 +155,7 @@ test.describe("Site integration chapter metadata", () => {
     expect(state.volumes).toEqual([])
   })
 
-  test("Manhuagui preserves category headings as volumes and anchor titles as chapter titles", async ({
+  test("Manhuagui preserves categories, numbered volumes, and community rating", async ({
     context,
     page,
   }) => {
@@ -181,6 +181,7 @@ test.describe("Site integration chapter metadata", () => {
     ])
 
     expect(state.chapters).toHaveLength(235)
+    expect(state.metadata?.communityRating).toBe(4.5)
     expect(
       state.chapters.map((chapter) => ({
         id: chapter.id,
@@ -196,7 +197,7 @@ test.describe("Site integration chapter metadata", () => {
           title: "第01卷",
           volumeId: "manhuagui-volume-1",
           volumeLabel: "单行本",
-          volumeNumber: undefined,
+          volumeNumber: 1,
         },
         {
           id: "219425",

@@ -13,6 +13,7 @@ type ManhuaguiLiveState = {
   siteIntegrationId?: string
   mangaId?: string
   chapters?: Array<{ id?: string; url?: string }>
+  metadata?: { contentRating?: string }
 }
 
 async function loadManhuaguiState(
@@ -128,6 +129,7 @@ test.describe("Manhuagui adult-gate cookie behavior (live)", () => {
       "non-empty"
     )
     expect(state.chapters?.length).toBeGreaterThan(0)
+    expect(state.metadata?.contentRating).toBeUndefined()
   })
 
   test("adult comic exposes no chapters without adult consent", async ({
@@ -149,6 +151,7 @@ test.describe("Manhuagui adult-gate cookie behavior (live)", () => {
       "empty"
     )
     expect(state.chapters).toEqual([])
+    expect(state.metadata?.contentRating).toBe("adult")
   })
 
   test("adult comic exposes chapters with adult consent", async ({
@@ -173,6 +176,7 @@ test.describe("Manhuagui adult-gate cookie behavior (live)", () => {
       "non-empty"
     )
     expect(state.chapters?.length).toBeGreaterThan(0)
+    expect(state.metadata?.contentRating).toBe("adult")
     expect(
       state.chapters?.every((chapter) =>
         chapter.url?.startsWith(`${MANHUAGUI_BASE_URL}/comic/21243/`)

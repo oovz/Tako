@@ -47,9 +47,19 @@ describe("Manhuagui live page context", () => {
   })
 
   it("replaces only the fetched chapter list with live, consented chapter DOM", async () => {
+    mocks.fetch.mockResolvedValueOnce({ ok: true, status: 200 })
+    mocks.fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { s1: 156, s2: 2, s3: 2, s4: 20, s5: 221 },
+        }),
+        { headers: { "content-type": "text/html; charset=utf-8" } }
+      )
+    )
     mocks.resolveSeriesDataViaOffscreen
       .mockResolvedValueOnce({
-        seriesMetadata: { title: "Adult series" },
+        seriesMetadata: { title: "Adult series", contentRating: "adult" },
         chapterList: { chapters: [], volumes: [] },
       })
       .mockResolvedValueOnce({
@@ -82,10 +92,21 @@ describe("Manhuagui live page context", () => {
       })
     ).resolves.toMatchObject({
       seriesId: "21243",
-      seriesMetadata: { title: "Adult series" },
+      seriesMetadata: {
+        title: "Adult series",
+        contentRating: "adult",
+        communityRating: 3.37,
+      },
       chapterList: { chapters: [expect.objectContaining({ id: "900001" })] },
     })
 
+    expect(mocks.fetch).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        endpointId: "readmanga-community-rating",
+        url: "https://www.manhuagui.com/tools/vote.ashx?act=get&bid=21243",
+      })
+    )
     expect(mocks.resolveSeriesDataViaOffscreen).toHaveBeenNthCalledWith(1, {
       siteIntegrationId: "readmanga",
       seriesUrl,
@@ -104,7 +125,14 @@ describe("Manhuagui live page context", () => {
     })
   })
 
-  it("does not decode hidden adult server data when no live chapter snapshot exists", async () => {
+  it("keeps gated metadata when optional vote counts are invalid", async () => {
+    mocks.fetch.mockResolvedValueOnce({ ok: true, status: 200 })
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json({
+        success: true,
+        data: { s1: 0, s2: 0, s3: 0, s4: 0, s5: -1 },
+      })
+    )
     mocks.resolveSeriesDataViaOffscreen.mockResolvedValueOnce({
       seriesMetadata: { title: "Adult series" },
       chapterList: { chapters: [], volumes: [] },
@@ -126,6 +154,7 @@ describe("Manhuagui live page context", () => {
         siteIntegrationSettingsReader,
       })
     ).resolves.toMatchObject({
+      seriesMetadata: { title: "Adult series", communityRating: undefined },
       chapterList: { chapters: [] },
       chapterListNotice: "adult-consent-required",
     })

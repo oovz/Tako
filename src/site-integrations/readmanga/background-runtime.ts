@@ -12,6 +12,7 @@ import { MANHUAGUI_PAGE_HOSTS, parseSeriesIdFromPath } from "./shared"
 import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
 import { ManhuaguiPageProbeDataSchema } from "./contracts/page-probe"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { fetchManhuaguiCommunityRating } from "./community-rating"
 
 function readManhuaguiLiveChapterHtml(
   pageProbeData: unknown
@@ -106,6 +107,10 @@ async function resolveManhuaguiSeriesData(input: {
     signal: input.signal,
     rateLimitService: input.rateLimitService,
   })
+  if (resolved.seriesMetadata) {
+    resolved.seriesMetadata.communityRating =
+      await fetchManhuaguiCommunityRating({ ...input, seriesId })
+  }
 
   if (!liveChapterHtml) {
     logger.debug("[manhuagui] Returning fetched chapter list", { seriesId })

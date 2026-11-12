@@ -205,7 +205,7 @@ test.describe("Manhuagui navigation", () => {
           id: "378325",
           volumeId: "manhuagui-volume-1",
           volumeLabel: "单行本",
-          volumeNumber: undefined,
+          volumeNumber: 1,
         },
         {
           id: "363932",

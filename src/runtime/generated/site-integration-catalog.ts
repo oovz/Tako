@@ -1751,6 +1751,19 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 15000000
       },
       {
+        "id": "readmanga-community-rating",
+        "purpose": "Manhuagui public vote counts served as text/html",
+        "origins": [
+          "https://www.manhuagui.com/*",
+          "https://manhuagui.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 4096
+      },
+      {
         "id": "readmanga-reader-config",
         "purpose": "Manhuagui reader configuration",
         "origins": [

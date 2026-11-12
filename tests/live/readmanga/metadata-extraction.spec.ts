@@ -3,7 +3,7 @@ import { LIVE_MANHUAGUI_REFERENCE_URL } from "../../e2e/fixtures/test-domains-co
 import { loadLiveTabState } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Manhuagui metadata extraction (live)", () => {
-  test("preserves category headings as volumes", async ({
+  test("preserves category headings, actual volume numbers, and community rating", async ({
     context,
     extensionId,
   }) => {
@@ -38,9 +38,18 @@ test.describe("Manhuagui metadata extraction (live)", () => {
       expect(
         chaptersInVolume.every((chapter) => chapter.volumeLabel === title)
       ).toBe(true)
-      expect(
-        chaptersInVolume.every((chapter) => chapter.volumeNumber === undefined)
-      ).toBe(true)
+      if (title === "单行本") {
+        expect(chaptersInVolume[0]).toMatchObject({
+          title: "第01卷",
+          volumeNumber: 1,
+        })
+      } else {
+        expect(
+          chaptersInVolume.every(
+            (chapter) => chapter.volumeNumber === undefined
+          )
+        ).toBe(true)
+      }
     }
 
     const singleTalkVolume = volumes.find(
@@ -58,6 +67,12 @@ test.describe("Manhuagui metadata extraction (live)", () => {
     expect(new URL(state.metadata?.coverUrl ?? "").hostname).toBe(
       "cf.mhgui.com"
     )
+    const score = page.locator("#scoreRes .score-avg em")
+    await expect(score).toHaveText(/^\d+\.\d$/)
+    const displayedFivePointScore = Number(await score.innerText()) / 2
+    expect(
+      Math.abs((state.metadata?.communityRating ?? 0) - displayedFivePointScore)
+    ).toBeLessThan(0.03)
 
     await page.close()
   })

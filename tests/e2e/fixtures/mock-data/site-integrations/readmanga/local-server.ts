@@ -64,6 +64,14 @@ function html(body: string): {
 /** Serve captured Manhuagui pages, with generated series pages for other IDs. */
 const manhuaguiMainHandler: MockRouteHandler = (req) => {
   const pathname = req.pathnameAfterPrefix
+  if (pathname === "/tools/vote.ashx") {
+    return html(
+      JSON.stringify({
+        success: true,
+        data: { s1: 0, s2: 0, s3: 0, s4: 1, s5: 1 },
+      })
+    )
+  }
 
   const chapterMatch = pathname.match(/^\/comic\/(\d+)\/(\d+)(?:_p\d+)?\.html$/)
   if (chapterMatch) {

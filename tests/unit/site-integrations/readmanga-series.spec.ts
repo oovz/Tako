@@ -49,14 +49,35 @@ describe("captured 看漫画 catalog", () => {
       id: "585094",
       title: "第01卷",
       chapterNumber: 1,
+      volumeNumber: 1,
     })
     expect(
       list.chapters.find((chapter) => chapter.id === "219425")
     ).toMatchObject({ title: "第01回", volumeLabel: "单话" })
     expect(
       list.chapters.find((chapter) => chapter.id === "494877")
-    ).toMatchObject({ title: "20卷附录", volumeLabel: "番外篇" })
+    ).toMatchObject({
+      title: "20卷附录",
+      volumeLabel: "番外篇",
+      volumeNumber: undefined,
+    })
     expect(result.metadataError).toBeUndefined()
     expect(result.chapterListError).toBeUndefined()
+  })
+
+  it("records an explicit adult rating on the gated server page", async () => {
+    const gatedHtml = `${html}<div id="erroraudit_show" class="warning-bar">
+      <p>如果你法定年龄已超过18岁。</p><a id="checkAdult">请点击此处继续阅读！</a>
+    </div>`
+    const result =
+      await offscreenSiteAdapter.offscreen.series!.resolveSeriesData({
+        requestId: "adult-series",
+        seriesUrl: "https://www.manhuagui.com/comic/21243/",
+        html: gatedHtml,
+        document: new DOMParser().parseFromString(gatedHtml, "text/html"),
+        rateLimitService: {} as never,
+      })
+    expect(result.seriesMetadata?.contentRating).toBe("adult")
+    expect(result.chapterListNotice).toBe("adult-consent-required")
   })
 })

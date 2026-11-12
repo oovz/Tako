@@ -8,6 +8,7 @@ import {
   toAllowedManhuaguiAssetUrl,
 } from "./shared"
 import {
+  normalizeNumericText,
   parseChapterNumber,
   parseVolumeInfo,
   sanitizeLabel,
@@ -234,6 +235,9 @@ function mapChapterGroupToChapters(group: ChapterGroup): Chapter[] {
       seenIds.add(chapterId)
       const chapterTitle = sanitizeLabel(link.title) || `Chapter ${chapterId}`
       const chapterNumber = parseChapterNumber(chapterTitle)
+      const volumeNumber =
+        readCollectedVolumeNumber(group.title, chapterTitle) ??
+        group.volumeNumber
 
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- assertion needed for filter type predicate compatibility
       return {
@@ -243,11 +247,11 @@ function mapChapterGroupToChapters(group: ChapterGroup): Chapter[] {
         chapterLabel: chapterTitle,
         chapterNumber,
         volumeId: group.volumeId,
-        volumeNumber: group.volumeNumber,
+        volumeNumber,
         volumeLabel: group.title,
         comicInfo: {
           Title: chapterTitle,
-          Volume: group.volumeNumber,
+          Volume: volumeNumber,
           LanguageISO: "zh",
         },
         __sortOrder: { linkIndex },
@@ -268,6 +272,18 @@ function mapChapterGroupToChapters(group: ChapterGroup): Chapter[] {
     void __sortOrder
     return rest
   })
+}
+
+function readCollectedVolumeNumber(
+  groupTitle: string | undefined,
+  chapterTitle: string
+): number | undefined {
+  if (groupTitle !== "单行本" && groupTitle !== "單行本") return undefined
+  const number = normalizeNumericText(chapterTitle).match(
+    /^第(\d+)卷(?:[（(]完[）)])?$/
+  )?.[1]
+  const volume = Number(number)
+  return Number.isSafeInteger(volume) && volume > 0 ? volume : undefined
 }
 
 type OrderedChapter = Chapter & { __sortOrder: { linkIndex: number } }
@@ -377,6 +393,9 @@ export function extractSeriesMetadataFromDocument(
     ...readSeriesDetails(documentLike),
     ...readSeriesPresentation(bookContainer, documentLike),
     language: "zh",
+    contentRating: documentLike.querySelector("#checkAdult")
+      ? "adult"
+      : undefined,
   }
 }
 
