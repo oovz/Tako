@@ -176,7 +176,7 @@ test("live synopsis comparison excludes Mangago's browser-added expansion contro
   page,
 }, testInfo) => {
   await page.setContent(
-    '<h1>A work</h1><div class="manga_right"><table><tr><td><label>Author:</label><a>Author</a>1998 released.</td></tr><tr><td><a href="/genre/Adventure/">Adventure</a></td></tr></table></div><div class="manga_summary">A full synopsis.<div class="transform comment_rname expand" title="Expand">+</div></div>'
+    '<h1>A work</h1><div class="manga_right"><table><tr><td><label>Author:</label><a>Author</a> 1998 released.</td></tr><tr><td><a href="/genre/Adventure/">Adventure</a></td></tr></table></div><div class="manga_summary">A full synopsis.<div class="transform comment_rname expand" title="Expand">+</div></div>'
   )
   await assertLiveSeriesMetadata(
     page,
@@ -189,6 +189,7 @@ test("live synopsis comparison excludes Mangago's browser-added expansion contro
         language: "en",
         author: "Author",
         genres: ["Adventure"],
+        year: 1998,
         description: "A full synopsis.",
       },
     },

@@ -148,6 +148,10 @@ export async function assertLiveSeriesMetadata(
             .map((node) => clean(node.textContent))
             .filter(Boolean)
         ).join(", ")
+        const release = clean(author?.textContent).match(
+          /\b([1-9]\d{3}) released\.?$/i
+        )
+        if (release) metadata.year = Number(release[1])
         metadata.genres = unique(texts('.manga_right a[href*="/genre/"]'))
         const score = text('.rating_wrap[rel="v:rating"] .rating_num')
         if (score) metadata.communityRating = Number(score) * 0.5
@@ -294,7 +298,7 @@ export async function assertLiveSeriesMetadata(
   })
   expect(state.metadata?.language).toBe(contract.language)
   if (state.siteIntegrationId === "mangago")
-    expect(state.metadata?.year).toBeUndefined()
+    expect(state.metadata?.year).toBe(source.metadata.year)
   for (const field of contract.required) {
     const value = state.metadata?.[field]
     if (Array.isArray(value)) {

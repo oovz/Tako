@@ -67,9 +67,16 @@ function readSeriesDetails(document: Document): Partial<SeriesMetadata> {
     findDetailCell(cells, "Genre(s)"),
     'a[href*="/genre/"]'
   )
+  // Mangago displays the release year as text after the author links.
+  const year = Array.from(authorCell?.childNodes ?? [])
+    .filter((node) => node.nodeType === node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join(" ")
+    .match(/\b([1-9]\d{3})\s+released\.?\s*$/i)?.[1]
   return {
     author: authors.join(", ") || undefined,
     genres: genres.length ? genres : undefined,
+    year: year ? Number(year) : undefined,
   }
 }
 

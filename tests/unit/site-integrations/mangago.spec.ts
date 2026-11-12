@@ -82,7 +82,7 @@ describe("Mangago content contracts", () => {
     expect(comicInfo.querySelector("Genre")?.textContent).toBe(
       "Action, Adventure, Fantasy, Shounen"
     )
-    expect(comicInfo.querySelector("Year")).toBeNull()
+    expect(comicInfo.querySelector("Year")?.textContent).toBe("1998")
     expect(comicInfo.querySelector("Summary")?.textContent).toMatch(
       /right to call themselves Hunters\.$/
     )
@@ -104,6 +104,7 @@ describe("Mangago content contracts", () => {
       documentFor(ultraBlackSeriesHtml),
       seriesUrl
     )
+    expect(result.seriesMetadata).toMatchObject({ year: 2007 })
     const chapters =
       result.chapterList && !Array.isArray(result.chapterList)
         ? result.chapterList.chapters
@@ -197,7 +198,7 @@ describe("Mangago content contracts", () => {
       "https://pic1.mangapicgallery.com/js/chapter.js?895"
     )
   })
-  it("retains the secondary catalog and ignores the incorrect displayed release year", async () => {
+  it("retains the secondary catalog and its displayed release year", async () => {
     const result = parseMangagoSeries(
       documentFor(secondarySeriesHtml),
       fixture.secondary.seriesUrl
@@ -212,10 +213,8 @@ describe("Mangago content contracts", () => {
         "Slice Of Life",
       ],
       communityRating: 4.3,
+      year: 2000,
     })
-    // Mangago shows 2000 for this title. Kadokawa dates volume 1 to 2018.
-    // https://store.kadokawa.co.jp/shop/g/g321802000494/
-    expect(result.seriesMetadata?.year).toBeUndefined()
     expect(result.seriesMetadata?.description).toContain(
       "Royal Capital’s Adventurer’s School"
     )
