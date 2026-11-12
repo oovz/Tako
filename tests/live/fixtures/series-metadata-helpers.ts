@@ -22,7 +22,7 @@ const contracts: Record<
   boylove: { language: "zh", required: ["author", "description"] },
   mangago: {
     language: "en",
-    required: ["author", "description", "genres", "year"],
+    required: ["author", "description", "genres"],
   },
   coolmic: { language: "en", required: ["author", "description", "genres"] },
   mangaplus: {
@@ -31,7 +31,10 @@ const contracts: Record<
   },
   mangaagain: { language: "zh", required: ["author", "description", "genres"] },
   copymanga: { language: "zh", required: ["author", "description", "genres"] },
-  mycomic: { language: "zh", required: ["description"] },
+  mycomic: {
+    language: "zh",
+    required: ["author", "description", "genres", "year"],
+  },
   mangahere: { language: "en", required: ["author", "description"] },
   lovemanga: { language: "zh", required: ["author", "description", "genres"] },
 }
@@ -70,6 +73,9 @@ export async function assertLiveSeriesMetadata(
       title?: string
       author?: string
       genres?: string[]
+      communityRating?: number
+      publisher?: string
+      readingDirection?: string
       year?: number
       description?: string
     } = {}
@@ -87,7 +93,22 @@ export async function assertLiveSeriesMetadata(
           ""
         )
         metadata.genres = texts(".manga-info-text .genres a")
-        body = text("#contentBox")
+        metadata.communityRating = Number(
+          document
+            .querySelector(".manga-info-text .rating")
+            ?.getAttribute("data-default")
+        )
+        const synopsis = document
+          .querySelector("#contentBox")
+          ?.cloneNode(true) as Element | undefined
+        synopsis?.querySelector(":scope > h2")?.remove()
+        synopsis?.querySelectorAll("br").forEach((br) => br.replaceWith(" "))
+        const decoded = document.createElement("template")
+        decoded.innerHTML = synopsis?.textContent ?? ""
+        decoded.content
+          .querySelectorAll("br")
+          .forEach((br) => br.replaceWith(" "))
+        body = clean(decoded.content.textContent)
         chosenSource = "#contentBox"
         break
       }
@@ -108,7 +129,12 @@ export async function assertLiveSeriesMetadata(
       }
       case "boylove":
         metadata.author = text(".stui-content__detail .data i + a")
-        chosenSource = "og:description"
+        body = clean(
+          document.querySelector<HTMLElement>(
+            ".stui-content__detail .detail-text"
+          )?.innerText
+        )
+        chosenSource = body ? "rendered work synopsis" : "og:description"
         break
       case "mangago": {
         metadata.title = text("h1")
@@ -123,10 +149,8 @@ export async function assertLiveSeriesMetadata(
             .filter(Boolean)
         ).join(", ")
         metadata.genres = unique(texts('.manga_right a[href*="/genre/"]'))
-        const year = clean(author?.textContent).match(
-          /\b(\d{4}) released\b/
-        )?.[1]
-        if (year) metadata.year = Number(year)
+        const score = text('.rating_wrap[rel="v:rating"] .rating_num')
+        if (score) metadata.communityRating = Number(score) * 0.5
         const synopsis = document
           .querySelector(".manga_summary")
           ?.cloneNode(true) as Element | undefined
@@ -150,11 +174,16 @@ export async function assertLiveSeriesMetadata(
             summary: string
             artists: Array<{ name: string }>
             genres: Array<{ name: string }>
+            agency?: string
+            contents_image_type?: string
           }
         }
         metadata.title = title.name
-        metadata.author = title.artists.map((artist) => artist.name).join(" / ")
+        metadata.author = title.artists.map((artist) => artist.name).join(", ")
         metadata.genres = title.genres.map((genre) => genre.name)
+        if (title.agency) metadata.publisher = title.agency
+        if (title.contents_image_type === "vertical")
+          metadata.readingDirection = "vertical"
         body = title.summary
         chosenSource = "website title bootstrap summary"
         break
@@ -170,9 +199,29 @@ export async function assertLiveSeriesMetadata(
         body = text(".intro")
         chosenSource = ".intro"
         break
-      case "mycomic":
+      case "mycomic": {
+        const labels = Array.from(document.querySelectorAll("label"))
+        const field = (label: string) => {
+          const matching = labels.find(
+            (node) => clean(node.textContent) === label
+          )
+          return Array.from(
+            matching?.nextElementSibling?.querySelectorAll("a") ?? []
+          )
+            .map((node) => clean(node.textContent))
+            .filter(Boolean)
+        }
+        metadata.author = field("原创作者:").join(", ")
+        metadata.genres = field("作品类型:")
+        const year = clean(
+          Array.from(document.querySelectorAll("h1, h2, p, div")).find((node) =>
+            /^\d{4}\s*\/\s*共\s*\d+\s*话$/.test(clean(node.textContent))
+          )?.textContent
+        ).match(/^\d{4}/)?.[0]
+        metadata.year = year ? Number(year) : undefined
         chosenSource = "og:description"
         break
+      }
       case "mangaplus":
         metadata.title = text('[class*="TitleDetailHeader-module_title_"]')
         metadata.author = text('[class*="TitleDetailHeader-module_author_"]')
@@ -191,14 +240,20 @@ export async function assertLiveSeriesMetadata(
           .split(/[,，]/)
           .map((value) => value.trim())
           .filter(Boolean)
+        const category = rows
+          .find((value) => /^类别[：:]/.test(value))
+          ?.replace(/^类别[：:]\s*/, "")
+        if (category && metadata.genres && !metadata.genres.includes(category))
+          metadata.genres.push(category)
         body = text(".comic_deCon_d")
         chosenSource = "rendered official work synopsis"
         break
       }
       case "mangahere":
-        metadata.author = text(".detail-author-bar").replace(
-          /^Author[：:]\s*/,
-          ""
+        metadata.author = texts(".detail-author-bar a").join(", ")
+        metadata.genres = texts(".detail-tag-bar a")
+        metadata.communityRating = Number(
+          text(".detail-top-bar-info-star span")
         )
         body = text(".detail-text-bar .fullcontent")
         chosenSource = ".detail-text-bar .fullcontent"
@@ -238,6 +293,8 @@ export async function assertLiveSeriesMetadata(
     contentType: "application/json",
   })
   expect(state.metadata?.language).toBe(contract.language)
+  if (state.siteIntegrationId === "mangago")
+    expect(state.metadata?.year).toBeUndefined()
   for (const field of contract.required) {
     const value = state.metadata?.[field]
     if (Array.isArray(value)) {

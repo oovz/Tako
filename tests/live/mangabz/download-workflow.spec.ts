@@ -23,6 +23,9 @@ test("saves a Mangabz chapter through Chrome Downloads", async ({
     "mangabz"
   )
   try {
+    const score = await page.locator(".detail-info-stars > span").innerText()
+    expect(score.trim()).toMatch(/^\d+(?:\.\d)?\s*分$/)
+    expect(state.metadata?.communityRating).toBe(Number.parseFloat(score) / 2)
     await persistDownloadSettings(optionsPage, {
       destination: "downloads-api",
       customDirectoryHandleId: null,

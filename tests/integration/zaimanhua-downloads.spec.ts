@@ -75,7 +75,7 @@ describe("Zaimanhua adapter workflow", () => {
       expect(state.seriesMetadata).toMatchObject({
         title: "斗佛",
         author: "画梦人",
-        genres: ["格斗", "神鬼"],
+        genres: ["格斗", "神鬼", "少年漫画"],
       })
       const chapters = Array.isArray(state.chapterList)
         ? state.chapterList

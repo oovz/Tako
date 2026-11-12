@@ -1,5 +1,5 @@
 import { installPageDiagnostics } from "../../e2e/fixtures/diagnostics"
-import { test } from "../../e2e/fixtures/extension"
+import { test, expect } from "../../e2e/fixtures/extension"
 import { LIVE_BOYLOVE_REFERENCE_URL } from "../../e2e/fixtures/test-domains-constants"
 import {
   loadLiveDownloadState,
@@ -35,6 +35,11 @@ test.describe("BoyLove download workflows (live)", () => {
     )
 
     try {
+      const score = await page
+        .locator(".stui-content__detail .rating .avg-score")
+        .innerText()
+      expect(score.trim()).toMatch(/^\d+(?:\.\d{1,2})?$/)
+      expect(state.metadata?.communityRating).toBe(Number(score))
       await persistDownloadSettings(optionsPage, {
         destination: "downloads-api",
         customDirectoryHandleId: null,

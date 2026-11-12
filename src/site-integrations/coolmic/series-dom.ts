@@ -64,6 +64,7 @@ function readChapters(
         chapterNumber: /^\d+(?:\.\d+)?$/.test(episode.number)
           ? Number(episode.number)
           : undefined,
+        releaseDate: episode.start_at,
         locked: isEpisodeLocked(episode, user),
         comicInfo: {},
       }
@@ -98,8 +99,14 @@ export function resolveCoolmicDocument(
     seriesMetadata: {
       title: title.name,
       description: title.summary,
-      author: title.artists.map((artist) => artist.name).join(" / "),
+      author: title.artists.map((artist) => artist.name).join(", "),
       genres: title.genres.map((genre) => genre.name),
+      publisher: title.agency,
+      communityRating: title.rating_records_count
+        ? title.rating_average
+        : undefined,
+      readingDirection:
+        title.contents_image_type === "vertical" ? "vertical" : undefined,
       coverUrl,
       status: title.is_completed ? "Completed" : "Ongoing",
       language: "en",

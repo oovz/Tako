@@ -5,3 +5,5 @@
 `packed-reader.html` retains the earlier 14-page packed-reader vector as additional protocol coverage. The Hunter X Hunter captures exercise metadata and reader parsing; generated image bytes exercise the deterministic output workflow.
 
 The series capture contains a truncated teaser, a “more” control, and the full synopsis in `.detail-text-bar .fullcontent`. Its Open Graph description describes the site.
+
+The genre links and HTTP cover URL were observed again on 2026-11-12. The fixture replaces the cover token with a test value.

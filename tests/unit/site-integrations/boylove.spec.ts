@@ -102,6 +102,10 @@ describe("BoyLove captured pages", () => {
       : result.chapterList?.chapters
     expect(chapters).toHaveLength(9)
     expect(chapters?.[0]).toMatchObject({ id: "2699104", title: "第1话" })
+    expect(result.seriesMetadata).toMatchObject({
+      description: "바보 천지 平台：ridibooks",
+      communityRating: 4.98,
+    })
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => readerResponse(secondaryReaderHtml))

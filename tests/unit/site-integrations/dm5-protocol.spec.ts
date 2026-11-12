@@ -18,29 +18,32 @@ const documents = [
     adapter: dm5,
     url: "https://www.dm5.com/manhua-series/",
     html: `<script>var DM5_COMIC_MID=33991;var DM5_COMIC_SORT=1;</script>
-      <div class="banner_detail_form"><div class="info"><p class="title">山海逆战<span>8.2分</span></p><p class="subtitle"><a>邱福龙</a></p><p class="content">Introduction</p></div></div>
-      <div id="chapterlistload"><a href="/m521974/"><p class="title">第1回 開始<span>（13P）</span></p><span class="icon-coin"></span></a><a href="/m521975/"><p class="title">第2回</p><span class="icon-coin"></span><span class="detail-lock"></span></a><a href="/m521974/">duplicate</a></div>
+      <div class="banner_detail_form"><div class="info"><p class="title">山海逆战<span class="right"><span class="score">8.3分</span></span></p><p class="subtitle"><a>邱福龙</a></p><p class="content">Introduction</p></div></div>
+      <div id="tempc"><div class="detail-list-title"><a class="block">连载<span>（2）</span></a><span class="s">完结<span>2023-06-23</span></span></div>
+      <div id="chapterlistload"><a href="/m521974/"><div class="info"><p class="title">第1回 開始<span>（13P）</span></p><p class="tip">2017-08-24</p></div><span class="icon-coin"></span></a><a href="/m521975/"><div class="info"><p class="title">第2回</p><p class="tip">2017-02-30</p></div><span class="icon-coin"></span><span class="detail-lock"></span></a><a href="/m521974/">duplicate</a></div></div>
       <a href="/m9999/">Advertisement</a>`,
     ids: ["521974", "521975"],
     title: "山海逆战",
     author: "邱福龙",
+    communityRating: 4.15,
   },
   {
     adapter: mangabz,
     url: "https://www.mangabz.com/139bz/",
     html: `<script>var MANGABZ_COMIC_MID=139;var MANGABZ_COMIC_SORT=2;</script>
-      <p class="detail-info-title">海賊王</p><p class="detail-info-tip"><a>尾田榮一郎</a></p>
+      <p class="detail-info-title">海賊王</p><p class="detail-info-stars"><span>2.0分</span></p><p class="detail-info-tip"><a>尾田榮一郎</a></p>
       <div id="chapterlistload"><a href="/m200/" class="detail-list-form-item">第2話 Two<span>（2P）</span></a><a href="/m100/" class="detail-list-form-item">第1話 One<span>（2P）</span></a></div>`,
     ids: ["100", "200"],
     title: "海賊王",
     author: "尾田榮一郎",
+    communityRating: 1,
   },
 ]
 
 describe("signed-reader series resolution", () => {
   it.each(documents)(
     "resolves $url in reading order and excludes unrelated links",
-    async ({ adapter, url, html, ids, title, author }) => {
+    async ({ adapter, url, html, ids, title, author, communityRating }) => {
       const document = new DOMParser().parseFromString(html, "text/html")
       const resolve = adapter.offscreen.series?.resolveSeriesData
       expect(resolve).toBeTypeOf("function")
@@ -53,16 +56,43 @@ describe("signed-reader series resolution", () => {
       })
       expect(result.seriesMetadata?.title).toBe(title)
       expect(result.seriesMetadata?.author).toBe(author)
+      expect(result.seriesMetadata?.communityRating).toBe(communityRating)
       const chapters = result.chapterList
       expect(Array.isArray(chapters)).toBe(true)
       if (!Array.isArray(chapters)) throw new Error("chapter list missing")
       expect(chapters.map((chapter) => chapter.id)).toEqual(ids)
       if (url.includes("dm5.com")) {
+        expect(result.seriesMetadata?.chapterCount).toBe(2)
         expect(chapters[0]?.locked).toBe(false)
         expect(chapters[1]?.locked).toBe(true)
+        expect(chapters[0]?.releaseDate).toBe("2017-08-24")
+        expect(chapters[1]?.releaseDate).toBeUndefined()
+      } else {
+        expect(chapters.every((chapter) => !chapter.releaseDate)).toBe(true)
       }
     }
   )
+
+  it.each([
+    ["an ongoing serial", "完结<span>", "连载中<span>"],
+    ["an incomplete catalog", "（2）", "（3）"],
+    [
+      "multiple groups",
+      '<span class="s">',
+      '<a class="block">番外<span>（1）</span></a><span class="s">',
+    ],
+  ])("omits a DM5 series count for %s", async (_case, pattern, replacement) => {
+    const series = documents[0]
+    const html = series.html.replace(pattern, replacement)
+    const result = await series.adapter.offscreen.series!.resolveSeriesData({
+      requestId: "series",
+      seriesUrl: series.url,
+      html,
+      document: new DOMParser().parseFromString(html, "text/html"),
+      rateLimitService: {} as never,
+    })
+    expect(result.seriesMetadata?.chapterCount).toBeUndefined()
+  })
 })
 
 describe("captured signed-reader catalogs", () => {

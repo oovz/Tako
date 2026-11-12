@@ -22,15 +22,27 @@ describe("Manga Again reader", () => {
     expect(first.seriesMetadata).toMatchObject({
       title: "斗佛",
       author: "画梦人",
-      genres: ["格斗", "神鬼"],
+      genres: ["格斗", "神鬼", "少年漫画"],
     })
     expect(second.seriesMetadata).toEqual(first.seriesMetadata)
     expect(first.chapterList).toHaveLength(46)
-    expect(first.chapterList[0]).toMatchObject({ id: "175505", title: "第1话" })
+    expect(first.chapterList[0]).toMatchObject({
+      id: "175505",
+      title: "第1话",
+      chapterLabel: "第1话",
+      chapterNumber: 1,
+    })
     expect(first.chapterList.at(-1)).toMatchObject({
       id: "195373",
       title: "重置版第13回",
+      chapterLabel: "重置版第13回",
+      chapterNumber: 13,
     })
+    expect(
+      first.chapterList
+        .filter((chapter) => chapter.chapterNumber === 13)
+        .map((chapter) => chapter.chapterLabel)
+    ).toEqual(["第13话", "重置版第13回"])
     expect(second.chapterList.map((chapter) => chapter.id)).toEqual(
       first.chapterList.map((chapter) => chapter.id)
     )

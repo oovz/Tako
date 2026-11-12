@@ -40,6 +40,47 @@ function readText(document: Document, selector: string): string {
   return sanitizeLabel(document.querySelector(selector)?.textContent ?? "")
 }
 
+function readCommunityRating(document: Document): number | undefined {
+  const rating = readText(document, ".manga-info-text #rate_row_cmd").match(
+    /(?:^|\s)(\d(?:\.\d{1,2})?)\s*\/\s*5\s*-\s*([\d,]+)\s+votes?$/i
+  )
+  const score = Number(rating?.[1])
+  const votes = Number(rating?.[2].replaceAll(",", ""))
+  return score > 0 && score <= 5 && votes > 0 ? score : undefined
+}
+
+function readDescription(document: Document): string | undefined {
+  const box = document.querySelector("#contentBox")
+  if (!box) return undefined
+  const heading = box.querySelector(":scope > h2")
+  const summary = document.createElement("template")
+  const escaped = document.createElement("template")
+  for (const node of box.childNodes) {
+    if (node === heading) continue
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Some series embed their entire synopsis as escaped markup.
+      escaped.innerHTML = (node.textContent ?? "").replace(/\s+/g, " ")
+      summary.content.append(escaped.content)
+    } else {
+      summary.content.append(node.cloneNode(true))
+    }
+  }
+  summary.content
+    .querySelectorAll("script, style")
+    .forEach((node) => node.remove())
+  summary.content
+    .querySelectorAll("br")
+    .forEach((node) => node.replaceWith("\n"))
+  summary.content.querySelectorAll("p").forEach((node) => node.after("\n\n"))
+  const description = (summary.content.textContent ?? "")
+    .split("\n")
+    .map(sanitizeLabel)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  return description || undefined
+}
+
 function readMetadata(document: Document): SeriesMetadata {
   const title = readText(document, ".manga-info-text h1")
   if (!title) throw new ProviderContractError("Series title is unavailable")
@@ -55,11 +96,12 @@ function readMetadata(document: Document): SeriesMetadata {
     title,
     ...details,
     coverUrl: coverUrl ? assertManganatoImageUrl(coverUrl).href : undefined,
-    description: readText(document, "#contentBox") || undefined,
+    description: readDescription(document),
     genres: Array.from(document.querySelectorAll(".manga-info-text .genres a"))
       .map((item) => sanitizeLabel(item.textContent ?? ""))
       .filter(Boolean),
     alternativeTitles: alternative ? [alternative] : undefined,
+    communityRating: readCommunityRating(document),
     language: "en",
   }
 }

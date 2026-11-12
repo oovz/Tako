@@ -4,4 +4,6 @@
 
 `series-kenshi.html` and `reader-kenshi.html` contain a same-date capture from [Kenshi O Mezashite Nyugaku Shitanoni Maho Tekisei 9999 Nandesukedo!?](https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/), with 74 catalog entries and the 35-page reader for `nbt:br_chapter-454512`. Its author, genres, year, and synopsis were refreshed from a public response on 2026-10-27.
 
+The community score and synopsis expand control in `series-kenshi.html` were captured on 2026-11-12. The fixture preserves the site's displayed release year.
+
 The captures retain older HTML links, nested routes, and fractional chapter labels. Account state and unrelated page content have been removed. Browser tests use generated PNG images; no chapter artwork is stored.

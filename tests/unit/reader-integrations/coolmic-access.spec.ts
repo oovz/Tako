@@ -72,6 +72,52 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe("Coolmic ComicInfo source data", () => {
+  it("reads the title publisher, all credits, and the dated episode releases", () => {
+    const document = new DOMParser().parseFromString(titleHtml, "text/html")
+    const result = resolveCoolmicDocument(
+      document,
+      "https://coolmic.me/titles/5101"
+    )
+
+    expect(result.seriesMetadata).toMatchObject({
+      author: "BILIBILI COMICS, h5.17k.com",
+      publisher: "BILIBILI COMICS",
+      readingDirection: "vertical",
+    })
+    expect(result.seriesMetadata?.communityRating).toBeUndefined()
+    expect(result.chapterList).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "130687", releaseDate: "2025-07-24" }),
+        expect.objectContaining({ id: "130735", releaseDate: "2025-08-07" }),
+      ])
+    )
+  })
+
+  it("preserves a voted five-star rating and omits an invalid release date", () => {
+    const document = new DOMParser().parseFromString(titleHtml, "text/html")
+    const node = document.querySelector("title-page")!
+    const source = JSON.parse(node.getAttribute(":page-objects")!)
+    source.title.rating_average = 4.25
+    source.title.rating_records_count = 10
+    source.title.agency = ""
+    source.episodes[0].start_at = "02/30/25"
+    node.setAttribute(":page-objects", JSON.stringify(source))
+
+    const result = resolveCoolmicDocument(
+      document,
+      "https://coolmic.me/titles/5101"
+    )
+    expect(result.seriesMetadata?.communityRating).toBe(4.25)
+    expect(result.seriesMetadata?.publisher).toBeUndefined()
+    expect(result.chapterList).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "130687", releaseDate: undefined }),
+      ])
+    )
+  })
+})
+
 describe("Coolmic episode availability", () => {
   it.each([
     {

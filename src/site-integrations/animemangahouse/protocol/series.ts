@@ -1,5 +1,6 @@
 import type { Chapter } from "@/src/types/chapter"
 import type { SeriesDataResolutionResult } from "@/src/types/site-integrations"
+import { ChapterReleaseDateSchema } from "@/src/runtime/series-data-schemas"
 import {
   parseChapterNumber,
   sanitizeLabel,
@@ -49,6 +50,8 @@ function seriesSelectors(site: SignedReaderSite) {
         title: ".banner_detail_form .info > .title",
         chapters: '#chapterlistload a[href^="/m"]',
         chapterTitle: ".info .title, .title",
+        chapterDate: ".info > .tip",
+        rating: ".banner_detail_form .title .score",
         cover: ".banner_detail_form .cover img",
         synopsis: ".banner_detail_form .content",
         authors: ".banner_detail_form .subtitle a",
@@ -58,6 +61,8 @@ function seriesSelectors(site: SignedReaderSite) {
         title: ".detail-info-title",
         chapters: "#chapterlistload a.detail-list-form-item",
         chapterTitle: null,
+        chapterDate: null,
+        rating: ".detail-info-stars > span",
         cover: ".detail-info-cover",
         synopsis: ".detail-info-content",
         authors: ".detail-info-tip > span:first-child a, .detail-info-tip > a",
@@ -83,20 +88,26 @@ function readChapterLabel(
 function readChapter(
   site: SignedReaderSite,
   anchor: HTMLAnchorElement,
-  titleSelector: string | null,
+  selectors: SeriesSelectors,
   seen: Set<string>
 ): Chapter | undefined {
   const url = new URL(anchor.getAttribute("href") ?? "", site.origin)
   const id = url.pathname.match(/^\/m(\d+)\/$/)?.[1]
   if (url.origin !== site.origin || !id || seen.has(id)) return
   seen.add(id)
-  const label = readChapterLabel(site, anchor, titleSelector)
+  const label = readChapterLabel(site, anchor, selectors.chapterTitle)
+  const date = selectors.chapterDate
+    ? anchor.querySelector(selectors.chapterDate)?.textContent?.trim()
+    : undefined
   return {
     id,
     url: url.href,
     title: label,
     chapterLabel: label,
     chapterNumber: parseChapterNumber(label),
+    releaseDate: date
+      ? ChapterReleaseDateSchema.safeParse(date).data
+      : undefined,
     locked: !!anchor.querySelector(".detail-lock"),
     comicInfo: { Title: label, LanguageISO: "zh" },
   }
@@ -118,7 +129,7 @@ function readChapters(
   const chapters: Chapter[] = []
   const seen = new Set<string>()
   for (const anchor of links) {
-    const chapter = readChapter(site, anchor, selectors.chapterTitle, seen)
+    const chapter = readChapter(site, anchor, selectors, seen)
     if (chapter) chapters.push(chapter)
   }
   if (chapters.length === 0)
@@ -154,6 +165,34 @@ function readSynopsis(
   return sanitizeLabel(synopsis?.textContent ?? "") || undefined
 }
 
+function readCommunityRating(
+  document: Document,
+  selector: string
+): number | undefined {
+  const score = document.querySelector(selector)?.textContent?.trim()
+  const tenPointRating = Number(score?.match(/^(\d+(?:\.\d)?)\s*分$/)?.[1])
+  if (tenPointRating > 0 && tenPointRating <= 10) return tenPointRating / 2
+}
+
+function readCompletedSerialCount(
+  document: Document,
+  catalogSize: number
+): number | undefined {
+  const groups = document.querySelectorAll(
+    "#tempc > .detail-list-title > a.block"
+  )
+  if (groups.length !== 1) return undefined
+  const group = groups[0]
+  const status = directText(
+    group.parentElement?.querySelector("span.s") ?? null
+  )
+  if (status !== "完结" && status !== "完結") return undefined
+
+  const label = sanitizeLabel(group.textContent ?? "")
+  const count = Number(label.match(/^(?:连载|連載)\s*[（(](\d+)[）)]$/)?.[1])
+  return count === catalogSize ? count : undefined
+}
+
 function readMetadata(
   document: Document,
   selectors: SeriesSelectors,
@@ -166,6 +205,7 @@ function readMetadata(
     author: [...new Set(authors)].join(", ") || undefined,
     genres: genres.length ? [...new Set(genres)] : undefined,
     description: readSynopsis(document, selectors.synopsis),
+    communityRating: readCommunityRating(document, selectors.rating),
     coverUrl:
       document.querySelector(selectors.cover)?.getAttribute("src") || undefined,
     language: "zh",
@@ -193,7 +233,13 @@ export function resolveSeriesDocument(
   const chapters = readChapters(site, document, selectors, script)
   return {
     seriesId,
-    seriesMetadata: readMetadata(document, selectors, title),
+    seriesMetadata: {
+      ...readMetadata(document, selectors, title),
+      chapterCount:
+        site.id === "animemangahouse"
+          ? readCompletedSerialCount(document, chapters.length)
+          : undefined,
+    },
     chapterList: chapters,
   }
 }

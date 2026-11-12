@@ -1,6 +1,16 @@
 import { z } from "zod"
 import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 const name = z.string().trim().min(1).max(4096)
+const episodeStartDate = z
+  .string()
+  .regex(/^\d{2}\/\d{2}\/\d{2}$/)
+  .transform((value) => {
+    const [month, day, year] = value.split("/")
+    return `20${year}-${month}-${day}`
+  })
+  .pipe(z.iso.date())
+  .optional()
+  .catch(undefined)
 export const CoolmicTitleBootstrapSchema = z.object({
   unreadable_title_error_code: z.string().max(128).default(""),
   user: z.object({
@@ -14,6 +24,18 @@ export const CoolmicTitleBootstrapSchema = z.object({
     vertical_thumbnail_url: z.string().url(),
     artists: z.array(z.object({ name })).max(100),
     genres: z.array(z.object({ name })).max(100),
+    agency: name.optional().catch(undefined),
+    contents_image_type: z
+      .enum(["page", "vertical"])
+      .optional()
+      .catch(undefined),
+    rating_average: z.number().positive().max(5).optional().catch(undefined),
+    rating_records_count: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .catch(undefined),
     is_completed: z.boolean(),
     is_hidden: z.boolean(),
     all_closed: z.boolean(),
@@ -25,6 +47,7 @@ export const CoolmicTitleBootstrapSchema = z.object({
         number: name,
         name,
         display_order: z.number().int().nonnegative(),
+        start_at: episodeStartDate,
         is_free: z.boolean(),
         was_purchased: z.boolean(),
         is_subscription_free: z.boolean(),

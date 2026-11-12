@@ -114,6 +114,7 @@ function readChapter(
     volumeId: `copy:${groupId}:${chapter.type}`,
     volumeLabel: `${groupName} · ${typeName}`,
     volumeNumber,
+    blackAndWhite: /\[全彩\]$/.test(chapter.name) ? "No" : undefined,
     comicInfo: { Title: chapter.name, Volume: volumeNumber },
   }
 }

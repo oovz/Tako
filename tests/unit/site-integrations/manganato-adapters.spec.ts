@@ -284,7 +284,16 @@ describe.each([
       title: "Hunter X Hunter",
       author: "TOGASHI Yoshihiro",
       language: "en",
+      communityRating: 4.9,
     })
+    expect(result.seriesMetadata?.description).toContain(
+      "From Viz:\nGon might be a country boy"
+    )
+    expect(result.seriesMetadata?.description).toContain("Aunt Mito's protests")
+    expect(result.seriesMetadata?.description).toContain(
+      "\n\nOfficial Japanese:\nJump Comics, Shounen Jump Plus, Zebrack Comic"
+    )
+    expect(result.seriesMetadata?.description).not.toMatch(/<[^>]+>|&#\d+;/)
     if (!Array.isArray(result.chapterList))
       throw new Error("Expected a chapter array")
     expect(result.chapterList).toHaveLength(546)

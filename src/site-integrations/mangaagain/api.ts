@@ -5,7 +5,10 @@ import {
 } from "./contracts/api"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
 import { cancelResponseBody } from "@/src/shared/response-body"
-import { parseChapterNumber } from "@/src/shared/site-integration-utils"
+import {
+  normalizeNumericText,
+  parseChapterNumber,
+} from "@/src/shared/site-integration-utils"
 import { integrationHttpClient } from "../http-client"
 import { ProviderContractError } from "../provider-contract-error"
 import type { Chapter } from "@/src/types/chapter"
@@ -77,7 +80,11 @@ function readChapters(info: SeriesInfo, source: URL): Chapter[] {
           "Zaimanhua returned duplicate chapter identities"
         )
       seen.add(chapter.chapter_id)
-      const chapterNumber = parseChapterNumber(chapter.chapter_title)
+      const number = normalizeNumericText(chapter.chapter_title).match(
+        /第\s*(\d+(?:\.\d+)?)\s*[回话話]/
+      )?.[1]
+      const chapterNumber =
+        number === undefined ? undefined : parseChapterNumber(number)
       chapters.push({
         id: String(chapter.chapter_id),
         url: new URL(
@@ -86,6 +93,8 @@ function readChapters(info: SeriesInfo, source: URL): Chapter[] {
         ).href,
         title: chapter.chapter_title,
         locked: !info.canRead || chapter.is_fee,
+        chapterLabel:
+          chapterNumber === undefined ? undefined : chapter.chapter_title,
         chapterNumber,
         language: "zh",
         comicInfo: { Series: info.title, Title: chapter.chapter_title },
@@ -98,6 +107,17 @@ function readChapters(info: SeriesInfo, source: URL): Chapter[] {
 }
 
 function readMetadata(info: SeriesInfo) {
+  const themes = info.themeTagList?.length
+    ? info.themeTagList.map((theme) => theme.tagName)
+    : (info.types?.split(",") ?? [])
+  const categories = info.cateTagList?.length
+    ? info.cateTagList.map((category) => category.tagName)
+    : [info.readerGroup ?? ""]
+  const genres = [
+    ...new Set(
+      [...themes, ...categories].map((value) => value.trim()).filter(Boolean)
+    ),
+  ]
   return {
     title: info.title,
     author:
@@ -105,9 +125,7 @@ function readMetadata(info: SeriesInfo) {
       info.authorsTagList?.map((author) => author.tagName).join(", "),
     description: info.description,
     coverUrl: info.cover,
-    genres:
-      info.themeTagList?.map((theme) => theme.tagName) ??
-      info.types?.split(","),
+    genres: genres.length ? genres : undefined,
     language: "zh",
   }
 }

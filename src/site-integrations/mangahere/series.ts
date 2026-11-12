@@ -82,21 +82,51 @@ function readDescription(document: Document): string | undefined {
   )
 }
 
-function readMetadata(document: Document, title: string) {
+function readCoverUrl(document: Document): string | undefined {
   const cover = document
     .querySelector('meta[name="og:image"], meta[property="og:image"]')
     ?.getAttribute("content")
+    ?.trim()
+  if (!cover) return undefined
+  try {
+    // The title page still uses HTTP for covers on its HTTPS-capable CDN.
+    return mangaHereImage(cover.replace(/^http:/i, "https:"))
+  } catch {
+    return undefined
+  }
+}
+
+function readAuthor(document: Document): string | undefined {
+  const row = document.querySelector(".detail-author-bar")
+  const authors = [
+    ...(row?.querySelectorAll('a[href^="/search/author/"]') ?? []),
+  ]
+    .map((link) => sanitizeLabel(link.textContent ?? ""))
+    .filter(Boolean)
+  return (
+    authors.join(", ") ||
+    sanitizeLabel(row?.textContent?.replace(/^\s*Author[：:]\s*/, "") ?? "") ||
+    undefined
+  )
+}
+
+function readMetadata(document: Document, title: string) {
+  const genres = [
+    ...document.querySelectorAll('.detail-tag-bar a[href^="/directory/"]'),
+  ]
+    .map((link) => sanitizeLabel(link.textContent ?? ""))
+    .filter(Boolean)
+  const score = Number(
+    document.querySelector(".detail-top-bar-info-star span")?.textContent
+  )
   return {
     title,
     language: "en",
-    author:
-      sanitizeLabel(
-        document
-          .querySelector(".detail-author-bar")
-          ?.textContent?.replace(/^\s*Author[：:]\s*/, "") ?? ""
-      ) || undefined,
+    author: readAuthor(document),
     description: readDescription(document),
-    coverUrl: cover ? mangaHereImage(cover) : undefined,
+    coverUrl: readCoverUrl(document),
+    genres: genres.length ? genres : undefined,
+    communityRating: score > 0 && score <= 5 ? score : undefined,
   }
 }
 

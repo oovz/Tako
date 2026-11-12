@@ -42,6 +42,29 @@ export function assertBoyloveImageUrl(value: string): URL {
   return url
 }
 
+function readDescription(document: Document): string | undefined {
+  const body = document
+    .querySelector(".stui-content__detail .detail-text")
+    ?.cloneNode(true) as Element | undefined
+  body?.querySelectorAll("br").forEach((node) => node.replaceWith(" "))
+  return (
+    sanitizeLabel(body?.textContent ?? "") ||
+    document
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute("content")
+      ?.trim() ||
+    undefined
+  )
+}
+
+function readCommunityRating(document: Document): number | undefined {
+  const element = document.querySelector(".stui-content__detail .rating")
+  const count = Number(element?.getAttribute("data-count"))
+  const score = Number(element?.getAttribute("data-avg"))
+  if (Number.isSafeInteger(count) && count > 0 && score >= 1 && score <= 5)
+    return Number(score.toFixed(2))
+}
+
 function readMetadata(document: Document, title: string): SeriesMetadata {
   const cover = document
     .querySelector(".stui-content__thumb .play")
@@ -53,11 +76,8 @@ function readMetadata(document: Document, title: string): SeriesMetadata {
         document.querySelector(".stui-content__detail .data i + a")
           ?.textContent ?? ""
       ) || undefined,
-    description:
-      document
-        .querySelector('meta[property="og:description"]')
-        ?.getAttribute("content")
-        ?.trim() || undefined,
+    description: readDescription(document),
+    communityRating: readCommunityRating(document),
     coverUrl: cover ? assertBoyloveImageUrl(cover).href : undefined,
     language: "zh",
   }

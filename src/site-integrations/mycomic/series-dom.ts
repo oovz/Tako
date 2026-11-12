@@ -22,9 +22,9 @@ const categories = [
 ]
 type ChapterEntry = ReturnType<typeof MyComicChapterGroupSchema.parse>[number]
 
-function readSeriesTitle(document: Document): string {
+function readSeriesTitle(document: Document, heading: Element | null): string {
   const title = sanitizeLabel(
-    document.querySelector("[data-flux-heading]")?.textContent ||
+    heading?.textContent ||
       document
         .querySelector('meta[property="og:title"]')
         ?.getAttribute("content")
@@ -35,8 +35,52 @@ function readSeriesTitle(document: Document): string {
   return title
 }
 
+function readMetadataLinks(
+  details: Element | null | undefined,
+  label: RegExp
+): string[] {
+  if (!details) return []
+  const row = Array.from(details.querySelectorAll("label")).find((node) =>
+    label.test(sanitizeLabel(node.textContent ?? ""))
+  )
+  const links = row?.nextElementSibling?.querySelectorAll("a") ?? []
+  return [
+    ...new Set(
+      Array.from(links, (link) => sanitizeLabel(link.textContent ?? "")).filter(
+        Boolean
+      )
+    ),
+  ]
+}
+
+function readSeriesRating(document: Document): number | undefined {
+  const heading = Array.from(
+    document.querySelectorAll("[data-flux-heading]")
+  ).find((node) => /^[评評][价價]$/.test(node.textContent?.trim() ?? ""))
+  const rating = heading?.nextElementSibling
+  const scale = rating?.querySelector(".sr-only")?.textContent?.trim()
+  const score = rating?.firstElementChild?.textContent?.trim() ?? ""
+  if (
+    !/^5\s*星[评評][价價]中/.test(scale ?? "") ||
+    !/^\d(?:\.\d{1,2})?$/.test(score)
+  )
+    return undefined
+  const value = Number(score)
+  return value > 0 && value <= 5 ? value : undefined
+}
+
 function readSeriesMetadata(document: Document): SeriesMetadata {
-  const title = readSeriesTitle(document)
+  const heading = document.querySelector("[data-flux-heading]")
+  const title = readSeriesTitle(document, heading)
+  const details = heading?.closest("[data-flux-card]")
+  const subheading = heading?.previousElementSibling
+  const year = subheading?.matches("[data-flux-subheading]")
+    ? sanitizeLabel(subheading.textContent ?? "").match(
+        /^(\d{4})\s*\/\s*共\s*\d+\s*[话話]$/
+      )?.[1]
+    : undefined
+  const authors = readMetadataLinks(details, /^原[创創]作者[:：]$/)
+  const genres = readMetadataLinks(details, /^作品[类類]型[:：]$/)
   const coverUrl =
     document
       .querySelector('meta[property="og:image"]')
@@ -48,7 +92,16 @@ function readSeriesMetadata(document: Document): SeriesMetadata {
         .querySelector('meta[property="og:description"]')
         ?.getAttribute("content") ?? ""
     ) || undefined
-  return { title, coverUrl, description, language: "zh" }
+  return {
+    title,
+    coverUrl,
+    description,
+    language: "zh",
+    author: authors.length ? authors.join(", ") : undefined,
+    genres: genres.length ? genres : undefined,
+    year: year ? Number(year) : undefined,
+    communityRating: readSeriesRating(document),
+  }
 }
 
 function readChapterGroup(

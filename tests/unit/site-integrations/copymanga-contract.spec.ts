@@ -141,6 +141,16 @@ describe("CopyManga reader", () => {
       chapterNumber: 1,
       volumeId: "copy:default:1",
     })
+    expect(
+      result.chapters.find(
+        (chapter) => chapter.id === "820f938e-16fb-11ed-9b6e-024352452ce0"
+      )
+    ).toMatchObject({ title: "第12話[全彩]", blackAndWhite: "No" })
+    expect(
+      result.chapters.find(
+        (chapter) => chapter.id === "dc312a94-f526-11e8-a7d3-00163e0ca5bd"
+      )?.blackAndWhite
+    ).toBeUndefined()
     const sameVolume = result.chapters.filter(
       (chapter) => chapter.volumeNumber === 1
     )

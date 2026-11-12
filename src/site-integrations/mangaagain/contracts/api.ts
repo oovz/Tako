@@ -26,6 +26,8 @@ export const ZaimanhuaComicSchema = z.object({
   authorsTagList: z.array(tag).max(100).optional(),
   themeTagList: z.array(tag).max(100).optional(),
   types: z.string().max(10_000).optional(),
+  readerGroup: z.string().trim().max(10_000).optional(),
+  cateTagList: z.array(tag).max(100).optional(),
   chapterList: z
     .array(
       z.object({

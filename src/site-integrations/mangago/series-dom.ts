@@ -33,6 +33,32 @@ function readDetailLinks(
   return [...new Set(labels)]
 }
 
+function readCommunityRating(document: Document): number | undefined {
+  const rating = document.querySelector('.rating_wrap[rel="v:rating"]')
+  const score = sanitizeLabel(
+    rating?.querySelector(".rating_num")?.textContent ?? ""
+  )
+  const votes = rating?.querySelector(
+    'a[href*="/home/manga/status/"]'
+  )?.textContent
+  const voteCount = sanitizeLabel(votes ?? "").match(/^([\d,]+)\s+voted$/i)?.[1]
+  const value = Number(score)
+  if (!(value > 0 && value <= 10) || !Number(voteCount?.replaceAll(",", "")))
+    return undefined
+  return Number((value / 2).toFixed(2))
+}
+
+function readSummary(document: Document): string | undefined {
+  const synopsis = document.querySelector(".manga_summary")?.cloneNode(true) as
+    Element | undefined
+  synopsis
+    ?.querySelectorAll(
+      ":scope > .transform.comment_rname.expand, :scope > .transform.comment_rname.collapse"
+    )
+    .forEach((control) => control.remove())
+  return sanitizeLabel(synopsis?.textContent ?? "") || undefined
+}
+
 function readSeriesDetails(document: Document): Partial<SeriesMetadata> {
   const cells = Array.from(document.querySelectorAll(".manga_right td"))
   const authorCell = findDetailCell(cells, "Author")
@@ -41,11 +67,9 @@ function readSeriesDetails(document: Document): Partial<SeriesMetadata> {
     findDetailCell(cells, "Genre(s)"),
     'a[href*="/genre/"]'
   )
-  const year = authorCell?.textContent?.match(/\b(\d{4})\s+released\b/i)?.[1]
   return {
     author: authors.join(", ") || undefined,
     genres: genres.length ? genres : undefined,
-    year: year ? Number(year) : undefined,
   }
 }
 
@@ -125,10 +149,8 @@ export function parseMangagoSeries(
       title,
       coverUrl,
       ...readSeriesDetails(document),
-      description:
-        sanitizeLabel(
-          document.querySelector(".manga_summary")?.textContent ?? ""
-        ) || undefined,
+      description: readSummary(document),
+      communityRating: readCommunityRating(document),
       language: "en",
     },
     chapterList: { chapters },

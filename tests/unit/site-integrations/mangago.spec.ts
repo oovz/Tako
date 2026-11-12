@@ -51,7 +51,6 @@ describe("Mangago content contracts", () => {
     expect(result.seriesMetadata).toMatchObject({
       title: "Hunter X Hunter",
       author: "TOGASHI Yoshihiro",
-      year: 1998,
       genres: ["Action", "Adventure", "Fantasy", "Shounen"],
       coverUrl:
         "https://i8.mangapicgallery.com/r/coverlink/rROHYUm8aBWtWyHvm2ureZ5RyXTk8VioExvQIzsBW4Yz71sgDwkjUa7pSGyap1FXkX5kDg6vUgCchdAWYT7sQfuWiC-W266WD8R.jpg?4",
@@ -79,7 +78,7 @@ describe("Mangago content contracts", () => {
     expect(comicInfo.querySelector("Genre")?.textContent).toBe(
       "Action, Adventure, Fantasy, Shounen"
     )
-    expect(comicInfo.querySelector("Year")?.textContent).toBe("1998")
+    expect(comicInfo.querySelector("Year")).toBeNull()
     expect(comicInfo.querySelector("Summary")?.textContent).toMatch(
       /right to call themselves Hunters\.$/
     )
@@ -163,7 +162,7 @@ describe("Mangago content contracts", () => {
       "https://pic1.mangapicgallery.com/js/chapter.js?895"
     )
   })
-  it("retains the secondary complete catalog and reader protocol observation", async () => {
+  it("retains the secondary catalog and ignores the incorrect displayed release year", async () => {
     const result = parseMangagoSeries(
       documentFor(secondarySeriesHtml),
       fixture.secondary.seriesUrl
@@ -177,8 +176,9 @@ describe("Mangago content contracts", () => {
         "Shoujo Ai",
         "Slice Of Life",
       ],
-      year: 2000,
+      communityRating: 4.3,
     })
+    expect(result.seriesMetadata?.year).toBeUndefined()
     expect(result.seriesMetadata?.description).toContain(
       "Royal Capital’s Adventurer’s School"
     )

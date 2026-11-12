@@ -39,6 +39,12 @@ describe("MYCOMIC reader", () => {
       })
     expect(result.seriesMetadata?.title).toBe("葬送者芙莉莲")
     expect(result.seriesMetadata?.description).toContain("打倒魔王")
+    expect(result.seriesMetadata).toMatchObject({
+      author: "アベツカサ, 山田鍾人",
+      genres: ["搞笑", "冒险", "少年"],
+      year: 2020,
+      communityRating: 5,
+    })
     const chapters =
       result.chapterList && !Array.isArray(result.chapterList)
         ? result.chapterList.chapters

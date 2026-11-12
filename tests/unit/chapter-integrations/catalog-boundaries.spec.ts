@@ -49,7 +49,6 @@ describe("Mangago catalog boundaries", () => {
       title: "A work",
       author: undefined,
       genres: undefined,
-      year: undefined,
       description: undefined,
     })
   })

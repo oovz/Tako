@@ -13,6 +13,7 @@
           "cover": "https://images.zaimanhua.com/img/webpic/19/5943391758891265.jpg",
           "canRead": true,
           "types": "格斗,神鬼",
+          "readerGroup": "少年漫画",
           "authorInfo": {
             "authorName": "画梦人"
           },
@@ -315,6 +316,11 @@
           "authorsTagList": [
             {
               "tagName": "画梦人"
+            }
+          ],
+          "cateTagList": [
+            {
+              "tagName": "少年漫画"
             }
           ],
           "themeTagList": [

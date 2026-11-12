@@ -14,6 +14,10 @@ const documentFor = (html: string) => {
   return document as unknown as Document
 }
 const origin = "https://newm.mangahere.cc"
+const hunterSeriesHtml = readFileSync(
+  "tests/fixtures/site-integrations/mangahere/series-page.html",
+  "utf8"
+)
 
 describe("MangaHere reader contracts", () => {
   it("decodes the captured first Hunter X Hunter chapter in declared order", () => {
@@ -37,18 +41,16 @@ describe("MangaHere reader contracts", () => {
     "preserves the captured catalog and volume identities with $label",
     ({ suffix }) => {
       const result = resolveMangaHereSeries(
-        documentFor(
-          readFileSync(
-            "tests/fixtures/site-integrations/mangahere/series-page.html",
-            "utf8"
-          )
-        ),
+        documentFor(hunterSeriesHtml),
         `${origin}/manga/hunter_x_hunter${suffix}`
       )
       expect(result.seriesMetadata).toMatchObject({
         title: "Hunter X Hunter",
         author: "TOGASHI Yoshihiro",
         language: "en",
+        communityRating: 4.9,
+        coverUrl:
+          "https://fmcdn.mangahere.com/store/manga/44/cover.jpg?token=fixture&ttl=1793052000&v=1788606335",
       })
       expect(result.seriesMetadata?.description).not.toContain("...more")
       expect(
@@ -69,6 +71,12 @@ describe("MangaHere reader contracts", () => {
       const window = new Window()
       const comicInfo = new window.DOMParser().parseFromString(xml!, "text/xml")
       const summary = comicInfo.querySelector("Summary")?.textContent
+      expect(comicInfo.querySelector("Genre")?.textContent).toBe(
+        "Action, Adventure, Comedy, Fantasy, Martial Arts, Mystery, Drama, Shounen, Psychological, Sci-fi, Tragedy, Webtoons"
+      )
+      expect(comicInfo.querySelector("CommunityRating")?.textContent).toBe(
+        "4.9"
+      )
       expect(summary?.match(/In Hunter X Hunter/g)).toHaveLength(1)
       expect(summary).not.toContain("...more")
       expect(summary).toMatch(/perceives and react towards his situation\.$/)
@@ -87,6 +95,34 @@ describe("MangaHere reader contracts", () => {
       })
     }
   )
+  it("separates adjacent author credits on MangaHere", () => {
+    const document = documentFor(hunterSeriesHtml)
+    document.querySelector(".detail-author-bar")!.innerHTML =
+      '<span>Author：</span><a href="/search/author/OHBA+Tsugumi/">OHBA Tsugumi</a><a href="/search/author/+ASAMI+Yuuko/"> ASAMI Yuuko</a>'
+
+    const result = resolveMangaHereSeries(
+      document,
+      `${origin}/manga/hunter_x_hunter/`
+    )
+    expect(result.seriesMetadata?.author).toBe("OHBA Tsugumi, ASAMI Yuuko")
+  })
+  it("keeps the series usable when its cover points outside the image policy", () => {
+    const document = documentFor(hunterSeriesHtml)
+    document
+      .querySelector('meta[name="og:image"]')!
+      .setAttribute(
+        "content",
+        "http://untrusted.example/store/manga/44/cover.jpg"
+      )
+
+    const result = resolveMangaHereSeries(
+      document,
+      `${origin}/manga/hunter_x_hunter/`
+    )
+    expect(result.seriesMetadata?.coverUrl).toBeUndefined()
+    expect(result.seriesMetadata?.title).toBe("Hunter X Hunter")
+    expect(result.chapterList).toHaveLength(425)
+  })
   it("decodes the additional packed image list without including advertisements", () => {
     const html = readFileSync(
       "tests/fixtures/site-integrations/mangahere/packed-reader.html",
