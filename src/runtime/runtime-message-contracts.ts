@@ -120,6 +120,8 @@ export type SidepanelDownloadState = z.infer<
 
 const SuccessSchema = z.strictObject({ success: z.literal(true) })
 
+export const OptionsActivityTaskIdSchema = z.string().min(1).max(500)
+
 const CommandEnvelopeShape = {
   commandId: z.string().uuid(),
   issuedAt: z.number().finite().nonnegative(),
@@ -751,11 +753,20 @@ export const runtimeMessageRegistry = {
     request: z.strictObject({
       target: z.literal("background"),
       type: z.literal("OPEN_OPTIONS"),
-      payload: z.strictObject({
-        page: z
-          .enum(["general", "storage", "network", "integrations", "activity"])
-          .optional(),
-      }),
+      payload: z
+        .strictObject({
+          page: z
+            .enum(["general", "storage", "network", "integrations", "activity"])
+            .optional(),
+          taskId: OptionsActivityTaskIdSchema.optional(),
+        })
+        .refine(
+          ({ page, taskId }) => taskId === undefined || page === "activity",
+          {
+            path: ["taskId"],
+            message: "Task links must open Activity",
+          }
+        ),
     }),
     response: successOrFailure(),
     target: "background",

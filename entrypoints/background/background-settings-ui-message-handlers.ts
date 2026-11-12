@@ -2,6 +2,7 @@ import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dis
 import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 import { reconcileFsaDestinationActionItem } from "./options-action-item-reconcile"
+import { openOptionsTab } from "./open-options-tab"
 
 type SettingsUiMessageType =
   | "GET_SITE_INTEGRATION_ENABLEMENT"
@@ -68,21 +69,7 @@ export function createBackgroundSettingsUiMessageHandlers(
       return { success: true }
     },
     OPEN_OPTIONS: async (message) => {
-      const page = message.payload.page
-      const tabParam = page ? `?tab=${encodeURIComponent(page)}` : ""
-      const url = chrome.runtime.getURL(`options.html${tabParam}`)
-      const tabs = await chrome.tabs.query({
-        url: chrome.runtime.getURL("options.html*"),
-      })
-      const existing = tabs[0]
-      if (typeof existing?.id === "number") {
-        await chrome.tabs.update(existing.id, { active: true, url })
-        if (typeof existing.windowId === "number") {
-          await chrome.windows.update(existing.windowId, { focused: true })
-        }
-      } else {
-        await chrome.tabs.create({ url, active: true })
-      }
+      await openOptionsTab(message.payload)
       return { success: true }
     },
   }

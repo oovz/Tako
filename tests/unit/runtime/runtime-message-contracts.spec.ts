@@ -150,6 +150,21 @@ describe("runtime message registry", () => {
     ).toBe(false)
   })
 
+  it("allows task deep links only on Activity and bounds their IDs", () => {
+    const parse = (payload: unknown) =>
+      runtimeMessageRegistry.OPEN_OPTIONS.request.safeParse({
+        target: "background",
+        type: "OPEN_OPTIONS",
+        payload,
+      }).success
+
+    expect(parse({ page: "activity", taskId: "folder-task" })).toBe(true)
+    expect(parse({ taskId: "folder-task" })).toBe(false)
+    expect(parse({ page: "general", taskId: "folder-task" })).toBe(false)
+    expect(parse({ page: "activity", taskId: "" })).toBe(false)
+    expect(parse({ page: "activity", taskId: "x".repeat(501) })).toBe(false)
+  })
+
   it("requires explicit payload objects for current empty-payload commands", () => {
     expect(
       runtimeMessageRegistry.REQUEST_TAB_CONTEXT_REFRESH.request.safeParse({

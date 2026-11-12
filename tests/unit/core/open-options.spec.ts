@@ -42,6 +42,20 @@ describe("openOptionsPage", () => {
     })
   })
 
+  it("includes the affected task when opening Activity from a task row", async () => {
+    sendMessage.mockResolvedValue({ success: true })
+
+    await expect(
+      openOptionsPage("activity", "folder-task")
+    ).resolves.toBeUndefined()
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      target: "background",
+      type: "OPEN_OPTIONS",
+      payload: { page: "activity", taskId: "folder-task" },
+    })
+  })
+
   it("throws when the background reports an options navigation failure", async () => {
     sendMessage.mockResolvedValue({ success: false, error: "boom" })
 

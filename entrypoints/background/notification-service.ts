@@ -8,6 +8,8 @@ import logger from "@/src/runtime/logger"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
+import { OptionsActivityTaskIdSchema } from "@/src/runtime/runtime-message-contracts"
+import { openOptionsTab } from "./open-options-tab"
 
 interface TaskCompletionNotificationInput {
   task: DownloadTaskState
@@ -33,17 +35,8 @@ function getIconUrl(): string {
   return chrome.runtime.getURL("icon/128.png")
 }
 
-function extractTaskId(notificationId: string): string | null {
-  if (notificationId.startsWith("task_complete_")) {
-    return notificationId.slice("task_complete_".length)
-  }
-
-  if (notificationId.startsWith("task_error_")) {
-    return notificationId.slice("task_error_".length)
-  }
-
-  return null
-}
+const COMPLETE_NOTIFICATION_PREFIX = "task_complete_"
+const ERROR_NOTIFICATION_PREFIX = "task_error_"
 
 export class NotificationService {
   async showDownloadCompleteNotification(
@@ -56,26 +49,33 @@ export class NotificationService {
     notificationId: string,
     queueRepository: QueueRepository
   ): Promise<void> {
-    const downloadId = await this.readPersistedDownloadId(
-      notificationId,
-      queueRepository
-    )
-    if (typeof downloadId === "number") {
-      void chrome.downloads.show(downloadId)
-    }
+    const complete = notificationId.startsWith(COMPLETE_NOTIFICATION_PREFIX)
+    if (!complete && !notificationId.startsWith(ERROR_NOTIFICATION_PREFIX))
+      return
 
-    void chrome.notifications.clear(notificationId)
+    const prefix = complete
+      ? COMPLETE_NOTIFICATION_PREFIX
+      : ERROR_NOTIFICATION_PREFIX
+    const taskId = OptionsActivityTaskIdSchema.safeParse(
+      notificationId.slice(prefix.length)
+    )
+    if (!taskId.success) return
+
+    const downloadId = complete
+      ? await this.readPersistedDownloadId(taskId.data, queueRepository)
+      : undefined
+    if (downloadId === undefined) {
+      await openOptionsTab({ page: "activity", taskId: taskId.data })
+    } else {
+      chrome.downloads.show(downloadId)
+    }
+    await chrome.notifications.clear(notificationId)
   }
 
   private async readPersistedDownloadId(
-    notificationId: string,
+    taskId: string,
     queueRepository: QueueRepository
   ): Promise<number | undefined> {
-    const taskId = extractTaskId(notificationId)
-    if (!taskId) {
-      return undefined
-    }
-
     try {
       const task = await queueRepository.getTask(taskId)
 
@@ -86,7 +86,7 @@ export class NotificationService {
       logger.debug(
         "[NotificationService] Failed to resolve persisted notification click target",
         {
-          notificationId,
+          taskId,
           error,
         }
       )
@@ -104,7 +104,7 @@ export class NotificationService {
       return
     }
 
-    const notificationId = `task_complete_${task.id}`
+    const notificationId = `${COMPLETE_NOTIFICATION_PREFIX}${task.id}`
     const totalCount = chaptersTotal ?? task.chapters.length
     const completedCount =
       chaptersCompleted ??
@@ -143,7 +143,7 @@ export class NotificationService {
       return
     }
 
-    const notificationId = `task_error_${task.id}`
+    const notificationId = `${ERROR_NOTIFICATION_PREFIX}${task.id}`
     const failedCount = task.chapters.filter(
       (chapter) =>
         chapter.status === "failed" || chapter.status === "partial_success"

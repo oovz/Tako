@@ -2,10 +2,24 @@ import { describe, expect, it } from "vitest"
 
 import {
   getInitialOptionsSection,
+  getLinkedActivityTaskId,
   getOptionsSectionUrl,
 } from "@/entrypoints/options/tab-routing"
 
 describe("options section URL routing", () => {
+  it("opens task links only in Activity and clears them during section navigation", () => {
+    const url =
+      "chrome-extension://example/options.html?tab=activity&task=folder%26task"
+
+    expect(getLinkedActivityTaskId(new URL(url).search)).toBe("folder&task")
+    expect(
+      getLinkedActivityTaskId("?tab=storage&task=folder%26task")
+    ).toBeUndefined()
+    expect(getOptionsSectionUrl(url, "storage")).toBe(
+      "chrome-extension://example/options.html?tab=storage"
+    )
+  })
+
   it("preserves unrelated query parameters when changing sections", () => {
     expect(
       getOptionsSectionUrl(

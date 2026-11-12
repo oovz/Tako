@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { t } from "@/src/runtime/i18n"
 import {
@@ -17,12 +17,19 @@ import {
 
 export type { DownloadTaskCardProps } from "./DownloadTaskCard-model"
 
-export function DownloadTaskCard(props: DownloadTaskCardProps) {
+export function DownloadTaskCard(
+  props: DownloadTaskCardProps & { onReveal?: (card: HTMLDivElement) => void }
+) {
   const {
     task,
     isChapterListExpanded: controlledExpanded,
     onChapterListExpandedChange,
+    onReveal,
   } = props
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (cardRef.current) onReveal?.(cardRef.current)
+  }, [onReveal])
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false)
   const expanded = controlledExpanded ?? uncontrolledExpanded
   const chapterListId = useId()
@@ -35,7 +42,11 @@ export function DownloadTaskCard(props: DownloadTaskCardProps) {
   }
   return (
     <Card
-      className="options-task-card relative"
+      ref={cardRef}
+      tabIndex={onReveal ? -1 : undefined}
+      role={onReveal ? "group" : undefined}
+      aria-label={onReveal ? task.seriesTitle : undefined}
+      className="options-task-card relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       aria-busy={actions.pendingAction !== null || actions.isCanceling}
     >
       <DownloadTaskCardCancelConfirmation task={task} actions={actions} />

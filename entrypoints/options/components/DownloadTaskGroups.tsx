@@ -6,7 +6,10 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { DownloadTaskSection } from "@/entrypoints/options/components/DownloadTaskSection"
+import {
+  DownloadTaskSection,
+  type TaskFocusRequest,
+} from "@/entrypoints/options/components/DownloadTaskSection"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import type { DownloadTaskActionResult } from "@/entrypoints/options/types/download-task-actions"
@@ -18,6 +21,7 @@ interface DownloadTaskGroupsProps {
   completedTasks: DownloadTaskState[]
   failedTasks: DownloadTaskState[]
   canceledTasks: DownloadTaskState[]
+  taskFocus?: TaskFocusRequest
   onCancel: (taskId: string) => Promise<DownloadTaskActionResult>
   onRetry: (taskId: string) => Promise<void>
   onRestart: (taskId: string) => Promise<void>
@@ -31,6 +35,7 @@ export function DownloadTaskGroups({
   completedTasks,
   failedTasks,
   canceledTasks,
+  taskFocus,
   onCancel,
   onRetry,
   onRestart,
@@ -41,6 +46,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Download className="size-4" />}
         tasks={activeTasks}
+        taskFocus={taskFocus}
         title={t("options_activeDownloads")}
         onCancel={onCancel}
         onRetry={onRetry}
@@ -51,6 +57,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Clock className="size-4" />}
         tasks={queuedTasks}
+        taskFocus={taskFocus}
         title={t("options_queued")}
         onCancel={onCancel}
         onRetry={onRetry}
@@ -61,6 +68,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<CheckCircle className="size-4" />}
         tasks={completedTasks}
+        taskFocus={taskFocus}
         title={t("options_completed")}
         titleClassName="text-primary"
         onCancel={onCancel}
@@ -72,6 +80,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<XCircle className="size-4" />}
         tasks={failedTasks}
+        taskFocus={taskFocus}
         title={t("options_failedPartial")}
         titleClassName="text-destructive"
         onCancel={onCancel}
@@ -83,6 +92,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<AlertCircle className="size-4" />}
         tasks={canceledTasks}
+        taskFocus={taskFocus}
         title={t("options_canceled")}
         onCancel={onCancel}
         onRetry={onRetry}

@@ -64,6 +64,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
+  window.history.replaceState(null, "", window.location.pathname)
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -83,6 +84,29 @@ function button(label: string, parent: ParentNode = document) {
   expect(found, `button ${label}`).toBeDefined()
   return found!
 }
+
+it("focuses the linked download card after Activity loads", async () => {
+  window.history.replaceState(null, "", "?tab=activity&task=completed")
+  const reveal = vi.spyOn(HTMLElement.prototype, "scrollIntoView")
+
+  await mount(defaults())
+
+  const taskCard = container.querySelector(
+    '.options-task-card[aria-label="Finished series"]'
+  )
+  expect(taskCard).toBeTruthy()
+  expect(document.activeElement).toBe(taskCard)
+  expect(reveal).toHaveBeenCalledWith({ block: "nearest" })
+})
+
+it("opens Activity normally if the linked download was removed", async () => {
+  window.history.replaceState(null, "", "?tab=activity&task=removed")
+
+  await mount(defaults())
+
+  expect(container.textContent).toContain("Finished series")
+  expect(document.activeElement).toBe(document.body)
+})
 
 it("routes chapter and task history confirmations to their own operations", async () => {
   const props = defaults()

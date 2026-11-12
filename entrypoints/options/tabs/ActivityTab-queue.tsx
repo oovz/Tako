@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from "react"
 import { Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -5,6 +6,7 @@ import { DownloadTaskGroups } from "../components/DownloadTaskGroups"
 import { partitionDownloadTasks } from "../components/downloads-tab-helpers"
 import type { useDownloadsTabState } from "../hooks/useDownloadsTabState"
 import { t } from "@/src/runtime/i18n"
+import { getLinkedActivityTaskId } from "../tab-routing"
 
 export function ActivityTabQueue({
   state,
@@ -15,6 +17,19 @@ export function ActivityTabQueue({
 }) {
   const { tasks, readStatus, cancelTask, retryTask, restartTask, removeTask } =
     state
+  const [linkedTaskId] = useState(() =>
+    getLinkedActivityTaskId(window.location.search)
+  )
+  const revealedTask = useRef(false)
+  const revealTask = useCallback(
+    (card: HTMLDivElement, scrollIntoView: () => void) => {
+      if (revealedTask.current) return
+      revealedTask.current = true
+      card.focus({ preventScroll: true })
+      scrollIntoView()
+    },
+    []
+  )
   const {
     activeTasks,
     queuedTasks,
@@ -61,6 +76,11 @@ export function ActivityTabQueue({
             completedTasks={completedTasks}
             failedTasks={failedTasks}
             canceledTasks={canceledTasks}
+            taskFocus={
+              linkedTaskId
+                ? { taskId: linkedTaskId, reveal: revealTask }
+                : undefined
+            }
             onCancel={cancelTask}
             onRetry={retryTask}
             onRestart={restartTask}

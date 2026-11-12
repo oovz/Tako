@@ -56,6 +56,7 @@ describe("notification behavior", () => {
   const downloadsShow = vi.fn()
   const notificationsClear = vi.fn()
   const storageLocalGet = vi.fn()
+  const tabsCreate = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -76,6 +77,7 @@ describe("notification behavior", () => {
       downloads: {
         show: downloadsShow,
       },
+      tabs: { query: vi.fn(async () => []), create: tabsCreate },
       notifications: {
         create: notificationsCreate,
         clear: notificationsClear,
@@ -177,6 +179,47 @@ describe("notification behavior", () => {
     ])
     expect(downloadsShow).toHaveBeenCalledWith(321)
     expect(notificationsClear).toHaveBeenCalledWith(`task_complete_${task.id}`)
+  })
+
+  it("opens the affected Activity task for a partial failure even if some files were saved", async () => {
+    const task = makeTask({
+      id: "partial&download=1",
+      status: "partial_success",
+      lastSuccessfulDownloadId: 321,
+    })
+    storageLocalGet.mockResolvedValue({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
+    })
+
+    await new NotificationService().handleNotificationClick(
+      `task_error_${task.id}`,
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
+    )
+
+    expect(downloadsShow).not.toHaveBeenCalled()
+    expect(tabsCreate).toHaveBeenCalledWith({
+      active: true,
+      url: "chrome-extension://test/options.html?tab=activity&task=partial%26download%3D1",
+    })
+    expect(notificationsClear).toHaveBeenCalledWith(`task_error_${task.id}`)
+  })
+
+  it("opens Activity when a successful notification has no Chrome file to reveal", async () => {
+    const task = makeTask({ id: "saved-to-folder" })
+    storageLocalGet.mockResolvedValue({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
+    })
+
+    await new NotificationService().handleNotificationClick(
+      `task_complete_${task.id}`,
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
+    )
+
+    expect(downloadsShow).not.toHaveBeenCalled()
+    expect(tabsCreate).toHaveBeenCalledWith({
+      active: true,
+      url: "chrome-extension://test/options.html?tab=activity&task=saved-to-folder",
+    })
   })
 
   it("opens a committed output retained across active-task recovery", async () => {
