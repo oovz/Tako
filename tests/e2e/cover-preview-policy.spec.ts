@@ -5,14 +5,17 @@ import { buildExampleUrl } from "./fixtures/test-domains-constants"
 import {
   getSessionState,
   getTabId,
+  openMangaSidepanelHarness,
   openSidepanelHarness,
   reloadSidepanelHarness,
+  setDownloadedChapterHistory,
   waitForTabSeriesTitle,
 } from "./fixtures/state-helpers"
 import { makeChapter, makeTask } from "./fixtures/queue-test-helpers"
 import { mycomicFixture } from "./fixtures/mock-data/site-integrations/mycomic/routes"
 import { PAGE_PNG } from "./fixtures/mock-data/site-integrations/expanded-site-fixture"
 import type { LocalMockServerHandle } from "./fixtures/local-mock-server"
+import type { DownloadedChapterRecord } from "../../src/domain/history/types"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
 
 const coverUrl = "https://biccam.com/comics/35937-2e233f.jpg"
@@ -87,6 +90,32 @@ async function expectDecodedCover(image: Locator): Promise<void> {
     .toBe(true)
 }
 
+function mangaCover(panel: Page, title: string): Locator {
+  return panel
+    .getByRole("tabpanel", { name: "Manga" })
+    .locator(".manga-header")
+    .filter({ has: panel.getByRole("heading", { name: title, exact: true }) })
+    .locator("[data-preview-state]")
+}
+
+function recentChapter(
+  task: DownloadTaskState,
+  savedAt: number
+): DownloadedChapterRecord {
+  return {
+    siteIntegrationId: task.siteIntegrationId,
+    seriesId: task.mangaId,
+    seriesTitle: task.seriesTitle,
+    chapterId: `saved-${task.id}`,
+    title: "Saved chapter",
+    url: "https://mycomic.com/cn/chapters/492178",
+    downloadedAt: savedAt,
+    saveConfirmedAt: savedAt,
+    outputDestination: "downloads-api",
+    format: "cbz",
+  }
+}
+
 async function stopBackgroundWorker(
   context: BrowserContext,
   panel: Page,
@@ -148,10 +177,11 @@ test("current series cover decodes fetched bytes using the integration Referer p
   await page.goto(fixture.seriesUrl, { waitUntil: "domcontentloaded" })
   const tabId = await getTabId(page, context)
   await waitForTabSeriesTitle(context, tabId, fixture.title)
-  const panel = await openSidepanelHarness(context, extensionId, page)
+  const panel = await openMangaSidepanelHarness(context, extensionId, page)
   try {
+    const image = mangaCover(panel, fixture.title).locator("img")
     await expect.poll(() => referers.length).toBeGreaterThan(0)
-    await expectDecodedCover(panel.getByRole("img", { name: fixture.title }))
+    await expectDecodedCover(image)
     expect(referers.every((referer) => referer === expectedReferer)).toBe(true)
     const state = await getSessionState<{ metadata?: { coverUrl?: string } }>(
       context,
@@ -161,7 +191,6 @@ test("current series cover decodes fetched bytes using the integration Referer p
     await _extensionContextState.backgroundWorker.evaluate(async () => {
       await chrome.offscreen.closeDocument()
     })
-    const image = panel.getByRole("img", { name: fixture.title })
     await expectDecodedCover(image)
     expect(
       await image.evaluate(
@@ -180,6 +209,7 @@ test("current series cover decodes fetched bytes using the integration Referer p
       )
     ).toBe(PAGE_PNG.byteLength)
     await reloadSidepanelHarness(panel, page)
+    await panel.getByRole("tab", { name: "Manga", exact: true }).click()
     _extensionContextState.backgroundWorker =
       await resolveBackgroundWorker(context)
     await expectDecodedCover(image)
@@ -199,27 +229,32 @@ for (const response of [
     page,
     _extensionContextState,
   }) => {
-    serveCover(_extensionContextState.localMockServer!, () => {}, response)
+    const referers: Array<string | undefined> = []
+    serveCover(
+      _extensionContextState.localMockServer!,
+      (referer) => referers.push(referer),
+      response
+    )
     await requireProviderReferer(_extensionContextState.backgroundWorker)
     const fixture = mycomicFixture.testCase
     await page.goto(fixture.seriesUrl, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
     await waitForTabSeriesTitle(context, tabId, fixture.title)
-    const panel = await openSidepanelHarness(context, extensionId, page)
+    const panel = await openMangaSidepanelHarness(context, extensionId, page)
     try {
-      const image = panel.getByRole("img", { name: fixture.title })
-      await expect(image).toHaveAttribute("src", /\/icon\/128\.png$/)
-      await expect(
-        panel.locator('[data-preview-state="fallback"]')
-      ).toHaveAttribute("aria-busy", "false")
-      await expect(image).toHaveJSProperty("naturalWidth", 128)
+      const cover = mangaCover(panel, fixture.title)
+      await expect.poll(() => referers).toContain(expectedReferer)
+      await expect(cover).toHaveAttribute("data-preview-state", "fallback")
+      await expect(cover).toHaveAttribute("aria-busy", "false")
+      await expect(cover.locator(".cover-placeholder svg")).toBeVisible()
+      await expect(cover.locator("img")).toHaveCount(0)
     } finally {
       await panel.close()
     }
   })
 }
 
-test("shares covers across queue and history rows and reloads them when the panel reopens", async ({
+test("shares covers across the active Queue row and Recent, then reloads them when the panel reopens", async ({
   context,
   extensionId,
   page,
@@ -233,90 +268,90 @@ test("shares covers across queue and history rows and reloads them when the pane
   await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
   let panel = await openSidepanelHarness(context, extensionId, page)
   const now = Date.now()
-  const tasks = [
-    makeTask({
-      id: "covered-queue",
-      siteIntegrationId: "mycomic",
-      mangaId: "35937",
-      seriesTitle: "Queued cover",
-      status: "queued",
-      created: now,
-      seriesCoverUrl: coverUrl,
-      chapters: [
-        makeChapter("https://mycomic.com/cn/chapters/492177", "queued"),
-      ],
-    }),
-    makeTask({
-      id: "covered-history",
-      siteIntegrationId: "mycomic",
-      mangaId: "35937",
-      seriesTitle: "Saved cover",
-      status: "completed",
-      created: now - 2000,
-      completed: now - 1000,
-      seriesCoverUrl: coverUrl,
-      chapters: [
-        makeChapter("https://mycomic.com/cn/chapters/492177", "completed"),
-      ],
-    }),
-  ]
+  const active = makeTask({
+    id: "covered-active",
+    siteIntegrationId: "mycomic",
+    mangaId: "35937",
+    seriesTitle: "Active cover",
+    status: "downloading",
+    created: now,
+    started: now,
+    seriesCoverUrl: coverUrl,
+    chapters: [
+      makeChapter("https://mycomic.com/cn/chapters/492177", "downloading"),
+    ],
+  })
+  const savedAt = now - 1000
+  const completed = makeTask({
+    id: "covered-history",
+    siteIntegrationId: "mycomic",
+    mangaId: "35937",
+    seriesTitle: "Saved cover",
+    status: "completed",
+    created: now - 2000,
+    completed: savedAt,
+    seriesCoverUrl: coverUrl,
+    chapters: [
+      {
+        ...makeChapter("https://mycomic.com/cn/chapters/492178", "completed"),
+        outputDestination: "downloads-api",
+        saveConfirmedAt: savedAt,
+      },
+    ],
+  })
+  const saved = recentChapter(completed, savedAt)
   try {
-    await seedTasksFromPanel(panel, tasks)
-    const queuedRow = panel
-      .locator("div.group.relative")
-      .filter({ hasText: "Queued cover" })
-    const historyRow = panel
-      .locator("div.group.relative")
-      .filter({ hasText: "Saved cover" })
-    await expectDecodedCover(queuedRow.locator("img"))
-    await expectDecodedCover(historyRow.locator("img"))
-    const sharedUrl = await queuedRow.locator("img").getAttribute("src")
-    await expect(historyRow.locator("img")).toHaveAttribute("src", sharedUrl!)
+    await seedTasksFromPanel(panel, [active, completed])
+    const queueImage = panel.locator('[data-task-id="covered-active"] img')
+    await expectDecodedCover(queueImage)
+    const sharedUrl = await queueImage.getAttribute("src")
+    await setDownloadedChapterHistory(context, [saved])
+    await panel.getByRole("tab", { name: "Recent", exact: true }).click()
+    const recent = panel.getByRole("tabpanel", { name: "Recent" })
+    const savedRow = recent
+      .getByRole("listitem")
+      .filter({ has: panel.getByText(saved.title, { exact: true }) })
+    const savedImage = savedRow.locator("img")
+    await expectDecodedCover(savedImage)
+    await expect(savedImage).toHaveAttribute("src", sharedUrl!)
     await _extensionContextState.backgroundWorker.evaluate(async () => {
       await chrome.offscreen.closeDocument()
     })
-    await expectDecodedCover(queuedRow.locator("img"))
-    await expectDecodedCover(historyRow.locator("img"))
+    await expectDecodedCover(queueImage)
+    await expectDecodedCover(savedImage)
     expect(
-      await queuedRow
-        .locator("img")
-        .evaluate(
-          async (element: HTMLImageElement) =>
-            (await (await fetch(element.src)).arrayBuffer()).byteLength
-        )
+      await queueImage.evaluate(
+        async (element: HTMLImageElement) =>
+          (await (await fetch(element.src)).arrayBuffer()).byteLength
+      )
     ).toBe(PAGE_PNG.byteLength)
     const initialRequests = referers.length
     expect(initialRequests).toBeGreaterThan(0)
     expect(referers.every((referer) => referer === expectedReferer)).toBe(true)
-    await seedTasksFromPanel(panel, [
-      ...tasks,
-      {
-        ...tasks[0],
-        id: "covered-second-consumer",
-        seriesTitle: "Second consumer",
-      },
-    ])
-    const additionalImage = panel
-      .locator("div.group.relative")
-      .filter({ hasText: "Second consumer" })
+    const second = {
+      ...saved,
+      chapterId: "second-saved-chapter",
+      title: "Second saved chapter",
+      url: "https://mycomic.com/cn/chapters/492179",
+    }
+    await setDownloadedChapterHistory(context, [saved, second])
+    const additionalImage = recent
+      .getByRole("listitem")
+      .filter({ hasText: second.title })
       .locator("img")
     await expectDecodedCover(additionalImage)
     await expect(additionalImage).toHaveAttribute("src", sharedUrl!)
     expect(referers).toHaveLength(initialRequests)
 
-    await historyRow
-      .getByRole("button", { name: "Remove", exact: true })
-      .click()
-    await expect(historyRow).toHaveCount(0)
-    await expectDecodedCover(queuedRow.locator("img"))
-    await expect(queuedRow.locator("img")).toHaveAttribute("src", sharedUrl!)
+    await setDownloadedChapterHistory(context, [second])
+    await expect(savedRow).toHaveCount(0)
+    await panel.getByRole("tab", { name: "Queue", exact: true }).click()
+    await expectDecodedCover(queueImage)
+    await expect(queueImage).toHaveAttribute("src", sharedUrl!)
 
     await panel.close()
     panel = await openSidepanelHarness(context, extensionId, page)
-    const restored = panel
-      .locator("div.group.relative")
-      .filter({ hasText: "Queued cover" })
-      .locator("img")
+    const restored = panel.locator('[data-task-id="covered-active"] img')
     await expectDecodedCover(restored)
     await expect(restored).not.toHaveAttribute("src", sharedUrl!)
     expect(referers.length).toBeGreaterThan(initialRequests)
@@ -389,13 +424,14 @@ test("a delayed cover from an earlier series cannot replace the current series i
   await page.goto(firstUrl, { waitUntil: "domcontentloaded" })
   const tabId = await getTabId(page, context)
   await waitForTabSeriesTitle(context, tabId, "Earlier series")
-  const panel = await openSidepanelHarness(context, extensionId, page)
+  const panel = await openMangaSidepanelHarness(context, extensionId, page)
   try {
     await expect.poll(() => firstRequested).toBe(true)
     await page.goto(secondUrl, { waitUntil: "domcontentloaded" })
     await waitForTabSeriesTitle(context, tabId, "Current series")
     await expect.poll(() => secondRequested).toBe(true)
-    const currentImage = panel.getByRole("img", { name: "Current series" })
+    await panel.getByRole("tab", { name: "Manga", exact: true }).click()
+    const currentImage = mangaCover(panel, "Current series").locator("img")
     await expectDecodedCover(currentImage)
     const currentBlob = await currentImage.getAttribute("src")
     delayed.resolve()
@@ -404,9 +440,7 @@ test("a delayed cover from an earlier series cannot replace the current series i
         new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     )
     await expect(currentImage).toHaveAttribute("src", currentBlob!)
-    await expect(
-      panel.getByRole("img", { name: "Earlier series" })
-    ).toHaveCount(0)
+    await expect(mangaCover(panel, "Earlier series")).toHaveCount(0)
     const state = await getSessionState<{ metadata?: { coverUrl?: string } }>(
       context,
       `tab_${tabId}`
@@ -418,7 +452,7 @@ test("a delayed cover from an earlier series cannot replace the current series i
   }
 })
 
-test("cover cache bounds settle excess rows and eviction releases unused Blob URLs", async ({
+test("evicts unused cover Blob URLs after 32 distinct previews", async ({
   context,
   extensionId,
   page,
@@ -455,39 +489,35 @@ test("cover cache bounds settle excess rows and eviction releases unused Blob UR
   )
   try {
     await seedTasksFromPanel(panel, tasks)
-    await expect(
-      panel.getByText("Cover capacity 33", { exact: true })
-    ).toBeVisible()
-    await expect(panel.locator('[data-preview-state="loading"]')).toHaveCount(
-      0,
-      {
-        timeout: 35_000,
-      }
+    await panel.getByRole("tab", { name: "Recent", exact: true }).click()
+    const recent = panel.getByRole("tabpanel", { name: "Recent" })
+    const ready = recent.locator('[data-preview-state="ready"] img')
+    const chapters = tasks.map((task, index) =>
+      recentChapter(task, now + index)
     )
-    const ready = panel.locator('[data-preview-state="ready"] img')
-    const readyCount = await ready.count()
-    expect(readyCount).toBeGreaterThan(0)
-    expect(readyCount).toBeLessThanOrEqual(32)
-    expect(
-      await panel.locator('[data-preview-state="fallback"]').count()
-    ).toBeGreaterThan(0)
+    // Recent shows up to 20 chapters. Load the 32 cached covers in two batches.
+    await setDownloadedChapterHistory(context, chapters.slice(0, 16))
+    await expect(ready).toHaveCount(16, { timeout: 35_000 })
     const retainedUrls = await ready.evaluateAll((images) =>
       images.map((image) => (image as HTMLImageElement).src)
     )
-    await seedTasksFromPanel(panel, [])
-    await expect(panel.locator("[data-preview-state]")).toHaveCount(0)
-    await seedTasksFromPanel(panel, [
-      {
-        ...tasks[0],
-        id: "cover-after-eviction",
-        seriesTitle: "Cover after eviction",
-        seriesCoverUrl: "https://biccam.com/comics/90000-fixture.png",
-      },
-    ])
+    await setDownloadedChapterHistory(context, [])
+    await expect(ready).toHaveCount(0)
+    await setDownloadedChapterHistory(context, chapters.slice(16, 32))
+    await expect(ready).toHaveCount(16, { timeout: 35_000 })
+    expect(
+      await panel.evaluate(
+        () =>
+          (window as unknown as { previewRevokedUrls: string[] })
+            .previewRevokedUrls
+      )
+    ).toHaveLength(0)
+
+    await setDownloadedChapterHistory(context, chapters.slice(32))
     await expectDecodedCover(
-      panel
-        .locator("div.group.relative")
-        .filter({ hasText: "Cover after eviction" })
+      recent
+        .getByRole("listitem")
+        .filter({ hasText: "Cover capacity 33" })
         .locator("img")
     )
     await expect
