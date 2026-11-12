@@ -1,6 +1,5 @@
 <!doctype html>
-<!-- Keep motion reduced until the saved preference is applied. -->
-<html lang="en" class="h-full" data-tako-motion="reduce">
+<html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,10 +13,50 @@
         padding: 0;
         overflow: hidden;
       }
+
+      .panel-startup {
+        box-sizing: border-box;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 10px;
+        height: 100%;
+        padding: 16px;
+        background: #fff;
+        color: #5e636b;
+        font:
+          500 13px/1.4 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+
+      .panel-startup::before {
+        content: "";
+        box-sizing: border-box;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #dfe2e6;
+        border-top-color: #1d5fbf;
+        border-radius: 50%;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .panel-startup::before {
+          animation: panel-startup-spin 0.8s linear infinite;
+        }
+      }
+
+      @keyframes panel-startup-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
     </style>
   </head>
   <body class="h-full">
-    <div id="root" class="h-full"></div>
+    <div id="root" class="h-full">
+      <div class="panel-startup" role="status">Loading Tako…</div>
+    </div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

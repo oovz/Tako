@@ -91,6 +91,47 @@ async function waitForSidepanelSeries(
 }
 
 test.describe("Side Panel activation", () => {
+  test("shows an animated startup indicator and honors reduced motion", async ({
+    extensionId,
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    const { promise, resolve } = Promise.withResolvers<void>()
+    let scriptHeld = false
+    await page.route(`chrome-extension://${extensionId}/**`, async (route) => {
+      if (route.request().resourceType() === "script") {
+        scriptHeld = true
+        await promise
+      }
+      await route.continue()
+    })
+
+    const loading = page.getByRole("status").filter({ hasText: "Loading Tako" })
+    const isAnimating = () =>
+      loading.evaluate((node) =>
+        node
+          .getAnimations({ subtree: true })
+          .some((animation) => animation.playState === "running")
+      )
+    try {
+      await page.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+        waitUntil: "commit",
+      })
+      await expect.poll(() => scriptHeld).toBe(true)
+      await expect(loading).toBeVisible()
+      await expect.poll(isAnimating).toBe(true)
+
+      await page.emulateMedia({ reducedMotion: "reduce" })
+      await expect.poll(isAnimating).toBe(false)
+      await expect(loading).toBeVisible()
+    } finally {
+      resolve()
+    }
+
+    await expect(page.getByRole("tab", { selected: true })).toBeVisible()
+    await expect(loading).toHaveCount(0)
+  })
+
   test("shows the panel while saved UI preferences are still loading", async ({
     context,
     extensionId,
