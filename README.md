@@ -24,9 +24,9 @@ Queue chapters from Chrome’s side panel and keep browsing while they download.
 
 Queue batches of chapters from different series in Chrome’s side panel. Keep browsing while Tako saves them to your library for offline reading.
 
-- 📚 **Read in your favorite app.** Save CBZ or ZIP files, or keep the individual images. CBZ files can include chapter details and cover art for your comic reader.
-- 📁 **Organize your library automatically.** Set folder and filename templates so Tako sorts chapters into series folders and names the files as it saves them.
-- 🔄 **Track your downloads.** Follow the queue, retry unfinished chapters, and check your history to see what’s ready to read.
+- 📚 **Read in your favorite app.** Save CBZ or ZIP files, or keep the individual images. CBZ files can include cover art and ComicInfo metadata, such as chapter titles and release dates when the site provides them.
+- 📁 **Organize your library automatically.** Preview the folder and filename templates in **Storage & Files**, then let Tako organize each new download.
+- 🔄 **Manage downloads from the side panel.** Reorder waiting tasks in **Queue**, retry unfinished chapters, and find saved chapters in **Recent**.
 
 ## Start with a series you enjoy
 
