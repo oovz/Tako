@@ -1,9 +1,17 @@
 import { test, expect } from "./fixtures/extension"
-import { getTabId } from "./fixtures/state-helpers"
-import { buildExampleUrl } from "./fixtures/test-domains-constants"
+import {
+  openSidepanelHarness,
+  setDownloadedChapterHistory,
+} from "./fixtures/state-helpers"
+import {
+  buildExampleUrl,
+  buildMangadexUrl,
+  MANGADEX_ORDER_TEST_SERIES_ID,
+} from "./fixtures/test-domains-constants"
 import {
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
@@ -12,8 +20,6 @@ import { MANGADEX_UPLOADS_BASE_URL } from "./fixtures/mock-data/site-integration
 const exampleRootUrl = buildExampleUrl("/")
 
 test.describe("Queue rendering", () => {
-  test.describe.configure({ mode: "serial" })
-
   test("shows friendly empty state on non-manga tab with no tasks", async ({
     context,
     extensionId,
@@ -21,21 +27,18 @@ test.describe("Queue rendering", () => {
   }) => {
     await page.goto(exampleRootUrl, { waitUntil: "domcontentloaded" })
 
-    // Ensure globalState has an explicitly empty queue
     await seedGlobalQueue(context, [])
 
-    await getTabId(page, context)
-    const sp = await context.newPage()
+    const sp = await openSidepanelHarness(context, extensionId, page)
     await sp.setViewportSize({ width: 360, height: 720 })
-    await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-      waitUntil: "domcontentloaded",
-    })
 
-    await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByText("No downloads yet")).toBeVisible()
+    await expect(
+      sp.getByText("Open a supported manga series page to get started.")
+    ).toBeVisible()
+    await expect(sp.getByText("No active downloads.")).toBeVisible()
   })
 
-  test("renders projected task cover thumbnails in queue rows", async ({
+  test("renders the active task cover in Queue", async ({
     context,
     extensionId,
     page,
@@ -48,27 +51,21 @@ test.describe("Queue rendering", () => {
       makeTask({
         id: "covered-task",
         seriesTitle: "Covered Series",
-        status: "queued",
+        status: "downloading",
         created: now - 1000,
         seriesCoverUrl: coverUrl,
-        chapters: [makeChapter(buildExampleUrl("/covered-chapter"), "queued")],
+        chapters: [
+          makeChapter(buildExampleUrl("/covered-chapter"), "downloading"),
+        ],
       }),
     ]
 
     await seedGlobalQueue(context, tasks)
 
-    await getTabId(page, context)
-    const sp = await context.newPage()
-    await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-      waitUntil: "domcontentloaded",
-    })
-
-    await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByText("Covered Series")).toBeVisible({
-      timeout: 15000,
-    })
-    await expect(sp.locator("img")).toHaveAttribute("src", /^blob:/)
-    await expect(sp.locator("img")).toHaveJSProperty("naturalWidth", 1)
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    const cover = sp.locator('[data-task-id="covered-task"] img')
+    await expect(cover).toHaveAttribute("src", /^blob:/)
+    await expect(cover).toHaveJSProperty("naturalWidth", 1)
   })
 
   test("renders global queue and header summary for active and queued tasks with recent history", async ({
@@ -102,14 +99,6 @@ test.describe("Queue rendering", () => {
         chapters: [makeChapter(buildExampleUrl("/c3"), "queued")],
       }),
       makeTask({
-        id: "completed-1",
-        seriesTitle: "Completed One",
-        status: "completed",
-        created: now - 8000,
-        completed: now - 7000,
-        chapters: [makeChapter(buildExampleUrl("/c4"), "completed")],
-      }),
-      makeTask({
         id: "failed-1",
         seriesTitle: "Failed One",
         status: "failed",
@@ -128,32 +117,39 @@ test.describe("Queue rendering", () => {
     ]
 
     await seedGlobalQueue(context, tasks)
+    await setDownloadedChapterHistory(context, [
+      {
+        siteIntegrationId: "mangadex",
+        seriesId: MANGADEX_ORDER_TEST_SERIES_ID,
+        seriesTitle: "Completed One",
+        chapterId: "saved-chapter",
+        url: buildMangadexUrl("/chapter/saved-chapter"),
+        title: "Saved chapter",
+        downloadedAt: now - 7000,
+        saveConfirmedAt: now - 7000,
+        outputDestination: "downloads-api",
+        format: "cbz",
+      },
+    ])
 
-    await getTabId(page, context)
-    const sp = await context.newPage()
-    await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-      waitUntil: "domcontentloaded",
-    })
-
-    await expect(sp.locator("#root")).toBeVisible()
-    // Storage subscription hydration can lag behind initial root mount in full-suite runs.
+    const sp = await openSidepanelHarness(context, extensionId, page)
     await sp.setViewportSize({ width: 360, height: 720 })
-    // Wait for seeded queue content before validating derived header counters.
-    await expect(sp.getByText("Active Series")).toBeVisible({ timeout: 15000 })
-    // Header uses separate badges: "X active" and "Y queued"
+    await expect(sp.getByText("Active Series")).toBeVisible()
     await expect(sp.getByText(/1\s*active/)).toBeVisible()
     await expect(sp.getByText(/2\s*queued/)).toBeVisible()
     await expect(sp.getByText("Queued One")).toBeVisible()
     await expect(sp.getByText("Queued Two")).toBeVisible()
-    await expect(sp.getByText("Recent history")).toBeVisible()
-    const recentHistory = sp.getByRole("region", { name: "Recent history" })
-    await expect(recentHistory).toHaveCSS("min-height", "98px")
-    await expect(recentHistory).toHaveCSS("flex-shrink", "0")
     await expect(sp.getByText("Failed One")).toBeVisible()
+    const feedback = await openTaskFeedback(
+      sp.locator('[data-task-id="failed-1"]')
+    )
     await expect(
-      sp.getByText("The network connection is unavailable.")
+      feedback.getByText("The network connection is unavailable.")
     ).toBeVisible()
     await expect(sp.getByText("Network error")).toHaveCount(0)
+    await sp.getByRole("tab", { name: "Recent" }).click()
+    await expect(sp.getByText("Completed One")).toBeVisible()
+    await expect(sp.getByText("Saved chapter")).toBeVisible()
     expect(
       await sp.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth

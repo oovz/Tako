@@ -129,6 +129,8 @@ test("approved panel: durable queue controls, conditional Manga, selection revie
     .first()
     .getByRole("button", { name: "Reorder task" })
     .dragTo(waitingRows.nth(2), {
+      // Give Chromium pointer moves to start the drag before reaching the drop row.
+      steps: 10,
       targetPosition: { x: 20, y: targetBounds!.height - 4 },
     })
   await waitForGlobalState(context, (state) => {

@@ -100,6 +100,14 @@ test("an active task keeps its row and exposes recovery when a chapter fails", a
   const following = page.locator(`[data-task-id="${waiting.id}"]`)
   await expect(row.locator(cancelControl)).toBeVisible()
   await expect(following).toBeVisible()
+  // Measure the settled Queue layout before comparing row placement.
+  await page
+    .getByRole("tabpanel", { name: "Queue" })
+    .evaluate(async (panel) => {
+      await Promise.allSettled(
+        panel.getAnimations().map((motion) => motion.finished)
+      )
+    })
   const before = await measureRow(row, waiting.id, cancelControl)
 
   await seedGlobalQueue(context, [

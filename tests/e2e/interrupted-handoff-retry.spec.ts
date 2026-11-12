@@ -4,6 +4,7 @@ import { waitForGlobalState } from "./fixtures/state-helpers"
 import {
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 
@@ -69,13 +70,20 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
   const sidepanel = await context.newPage()
   await sidepanel.setViewportSize({ width: 360, height: 720 })
   await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`)
-  await expect(sidepanel.getByText(warning, { exact: false })).toBeVisible()
-  await sidepanel
+  const row = sidepanel.locator(`[data-task-id="${interrupted.id}"]`)
+  const feedback = await openTaskFeedback(row)
+  await expect(feedback.getByText(warning)).toBeVisible()
+  await feedback
     .getByRole("button", {
       name: "Retry all chapters (may create duplicates)",
       exact: true,
     })
     .click()
+  const confirmation = row.getByRole("group", { name: "Restart this task?" })
+  await expect(
+    confirmation.getByText(/may create duplicate files/)
+  ).toBeVisible()
+  await confirmation.getByRole("button", { name: "Restart anyway" }).click()
   const state = await waitForGlobalState(context, (state) =>
     state.downloadQueue.some(
       (task) => task.id !== interrupted.id && task.isRetryTask === true
