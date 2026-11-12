@@ -72,6 +72,37 @@ export function registerComicInfoGenerateCases(): void {
     })
 
     describe("Field ordering", () => {
+      it("serializes pages, rating and chapter credits in schema sequence", () => {
+        const result = generateComicInfo({
+          ScanInformation: "Scan team",
+          AgeRating: "Everyone",
+          LanguageISO: "en",
+          PageCount: 1,
+          Pages: [{ Image: 0, Type: "FrontCover" }],
+          CommunityRating: 0,
+          MainCharacterOrTeam: "Main character",
+          Review: "Review text",
+        })
+
+        const tags = Array.from(
+          result!.matchAll(/<(\w+)>/g),
+          (match) => match[1]
+        )
+        expect(tags).toEqual([
+          "Series",
+          "Notes",
+          "PageCount",
+          "LanguageISO",
+          "ScanInformation",
+          "AgeRating",
+          "Pages",
+          "CommunityRating",
+          "MainCharacterOrTeam",
+          "Review",
+        ])
+        expect(result).toContain("<CommunityRating>0</CommunityRating>")
+      })
+
       it("outputs fields in correct ComicInfo v2.0 order", () => {
         const metadata: ComicInfoV2 = {
           Publisher: "Test Publisher",
