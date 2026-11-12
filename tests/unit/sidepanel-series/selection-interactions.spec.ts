@@ -422,9 +422,9 @@ describe("mounted series selection", () => {
 
   it("keeps controls disabled during an enqueue and displays loading before the list is ready", async () => {
     await render(series({ isChaptersLoading: true }))
-    expect(
-      container.querySelector('[role="status"]')?.getAttribute("aria-busy")
-    ).toBe("true")
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Loading chapters…"
+    )
     expect(container.querySelector('[role="checkbox"]')).toBeNull()
     await render()
     await click(container.querySelector<HTMLButtonElement>("#select-all-ctx")!)

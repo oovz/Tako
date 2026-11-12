@@ -1781,6 +1781,15 @@
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "Use MangaDex website local settings when available."
   },
+  "sidepanel_loadingManga": {
+    "message": "Loading manga info…"
+  },
+  "sidepanel_loadingChapters": {
+    "message": "Loading chapters…"
+  },
+  "sidepanel_retryingSeries": {
+    "message": "Retrying…"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "Couldn’t load this series"
   },

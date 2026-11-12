@@ -1778,6 +1778,15 @@
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "利用可能な場合、MangaDexのサイト設定を使用します。"
   },
+  "sidepanel_loadingManga": {
+    "message": "マンガ情報を読み込み中…"
+  },
+  "sidepanel_loadingChapters": {
+    "message": "エピソードを読み込み中…"
+  },
+  "sidepanel_retryingSeries": {
+    "message": "再試行中…"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "シリーズ情報を読み込めませんでした"
   },

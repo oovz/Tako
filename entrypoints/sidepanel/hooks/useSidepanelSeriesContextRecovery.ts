@@ -20,7 +20,7 @@ type RequestRefresh = (
 type RecoveryAttempt = {
   key: string
   targetKey: string
-  pending: boolean
+  pending?: Promise<void>
   errorRecovery: boolean
 }
 
@@ -62,28 +62,11 @@ function recoveryTarget(
   return { tabId: observation.tabId, windowId: observation.windowId }
 }
 
-function suppressRecovery(
-  attempt: RecoveryAttempt | undefined,
-  targetKey: string,
-  observation: SeriesContextRecoveryObservation,
-  explicitRetry: boolean
-) {
-  if (attempt?.targetKey !== targetKey) return false
-  if (attempt.pending) return true
-  return (
-    !explicitRetry &&
-    attempt.errorRecovery &&
-    (observation.activeTabContext.kind === "error" ||
-      observation.activeTabContext.kind === "loading")
-  )
-}
-
 class SeriesContextRecoveryCoordinator {
   private activeAttempt: RecoveryAttempt | undefined
   constructor(private readonly requestRefresh: RequestRefresh) {}
 
   private async request(attempt: RecoveryAttempt, target: RefreshTarget) {
-    this.activeAttempt = attempt
     try {
       const response = await this.requestRefresh(target)
       if (!response.success) this.clearAttempt(attempt)
@@ -91,7 +74,7 @@ class SeriesContextRecoveryCoordinator {
       this.clearAttempt(attempt)
       throw error
     } finally {
-      attempt.pending = false
+      attempt.pending = undefined
     }
   }
 
@@ -114,13 +97,17 @@ class SeriesContextRecoveryCoordinator {
       target.tabId,
       observation.sourceUrl,
     ].join(":")
+    const current =
+      this.activeAttempt?.targetKey === targetKey
+        ? this.activeAttempt
+        : undefined
+    // Keep the retry UI pending if a refresh already owns this page.
+    if (current?.pending) return explicitRetry ? current.pending : undefined
     if (
-      suppressRecovery(
-        this.activeAttempt,
-        targetKey,
-        observation,
-        explicitRetry
-      )
+      !explicitRetry &&
+      current?.errorRecovery &&
+      (observation.activeTabContext.kind === "error" ||
+        observation.activeTabContext.kind === "loading")
     )
       return
     const key = [
@@ -128,18 +115,17 @@ class SeriesContextRecoveryCoordinator {
       describeRecoverableSeriesContext(observation.activeTabContext),
     ].join(":")
     if (!explicitRetry && this.activeAttempt?.key === key) return
-    await this.request(
-      {
-        key,
-        targetKey,
-        pending: true,
-        errorRecovery: observation.activeTabContext.kind === "error",
-      },
-      {
-        ...target,
-        ...(explicitRetry ? { reason: "sidepanel-retry" } : {}),
-      }
-    )
+    const attempt: RecoveryAttempt = {
+      key,
+      targetKey,
+      errorRecovery: observation.activeTabContext.kind === "error",
+    }
+    this.activeAttempt = attempt
+    attempt.pending = this.request(attempt, {
+      ...target,
+      ...(explicitRetry ? { reason: "sidepanel-retry" } : {}),
+    })
+    await attempt.pending
   }
 
   recoverIfNeeded(observation: SeriesContextRecoveryObservation) {

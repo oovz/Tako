@@ -1778,6 +1778,15 @@
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "可用時使用 MangaDex 網站本機設定。"
   },
+  "sidepanel_loadingManga": {
+    "message": "正在載入漫畫資訊…"
+  },
+  "sidepanel_loadingChapters": {
+    "message": "正在載入章節…"
+  },
+  "sidepanel_retryingSeries": {
+    "message": "正在重試…"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "無法載入這部漫畫"
   },

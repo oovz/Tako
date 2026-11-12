@@ -60,22 +60,37 @@ type PresentationUpdater = (
   ) => InlineSelectionPresentationState
 ) => void
 
-function SeriesSelectionLoading() {
+function SeriesSelectionLoading({
+  data,
+}: {
+  data: SidepanelSeriesContextData
+}) {
   return (
-    <div
-      className="flex flex-col h-full"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={t("common_loading")}
-    >
-      <div className="px-3 py-2 bg-muted/50 border-b border-border">
-        <div className="h-4 w-24 bg-muted rounded" />
+    <div className="manga-selection">
+      <div className="manga-scroll">
+        <SeriesContextCard data={data} />
+        <div className="manga-controls manga-loading-status" role="status">
+          {t(
+            data.isLoading
+              ? "sidepanel_loadingManga"
+              : "sidepanel_loadingChapters"
+          )}
+        </div>
+        <div aria-hidden="true">
+          {[65, 51, 72, 47].map((width) => (
+            <div key={width} className="manga-chapter manga-skeleton-row">
+              <span />
+              <span style={{ width: `${width}%` }} />
+              <span />
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="flex-1 p-3 flex flex-col gap-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-8 bg-muted rounded" />
-        ))}
+      <div className="selection-footer">
+        <button type="button" className="panel-primary" disabled>
+          <PanelIcon name="download" />
+          {t("sidepanel_downloadAction")}
+        </button>
       </div>
     </div>
   )
@@ -286,7 +301,7 @@ export function SeriesInlineSelection({
   }
 
   if (data.isLoading || data.isChaptersLoading) {
-    return <SeriesSelectionLoading />
+    return <SeriesSelectionLoading data={data} />
   }
 
   const handleStart = async () => {

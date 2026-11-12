@@ -1781,6 +1781,15 @@
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "MangaDex 웹사이트에 저장된 설정이 있으면 사용합니다."
   },
+  "sidepanel_loadingManga": {
+    "message": "만화 정보를 불러오는 중…"
+  },
+  "sidepanel_loadingChapters": {
+    "message": "회차를 불러오는 중…"
+  },
+  "sidepanel_retryingSeries": {
+    "message": "다시 시도 중…"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "작품을 불러오지 못했습니다"
   },

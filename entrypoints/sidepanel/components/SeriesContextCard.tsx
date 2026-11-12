@@ -16,14 +16,13 @@ export function SeriesContextCard({
   )
   if (data.isLoading)
     return (
-      <header
-        className="manga-header manga-header-loading"
-        role="status"
-        aria-label={t("common_loading")}
-      >
+      <header className="manga-header manga-header-loading" aria-hidden="true">
         <div className="manga-cover" />
         <div className="manga-loading-title" />
-        <div className="manga-info manga-loading-info" />
+        <div className="manga-info manga-loading-info">
+          <span />
+          <span />
+        </div>
       </header>
     )
   return (
@@ -59,27 +58,27 @@ export function SeriesContextCard({
         {data.author?.trim() && (
           <p className="manga-author">{data.author.trim()}</p>
         )}
-        <p className="panel-meta">
-          {volumeCount > 0 && (
-            <>
-              {t(
-                volumeCount === 1
-                  ? "sidepanel_oneVolume"
-                  : "sidepanel_volumeCount",
-                [String(volumeCount)]
-              )}{" "}
-              ·{" "}
-            </>
-          )}
-          {data.isChaptersLoading
-            ? t("common_loading")
-            : t(
-                chapterCount === 1
-                  ? "sidepanel_oneChapter"
-                  : "sidepanel_chapterCount",
-                [String(chapterCount)]
-              )}
-        </p>
+        {!data.isChaptersLoading && (
+          <p className="panel-meta">
+            {volumeCount > 0 && (
+              <>
+                {t(
+                  volumeCount === 1
+                    ? "sidepanel_oneVolume"
+                    : "sidepanel_volumeCount",
+                  [String(volumeCount)]
+                )}{" "}
+                ·{" "}
+              </>
+            )}
+            {t(
+              chapterCount === 1
+                ? "sidepanel_oneChapter"
+                : "sidepanel_chapterCount",
+              [String(chapterCount)]
+            )}
+          </p>
+        )}
         {data.chapterListNotice === "adult-consent-required" && (
           <p className="panel-meta">{t("sidepanel_adultConsentRequired")}</p>
         )}

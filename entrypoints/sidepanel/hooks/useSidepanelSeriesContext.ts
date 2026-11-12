@@ -24,12 +24,15 @@ export { createSeriesContextRecoveryCoordinator } from "./useSidepanelSeriesCont
 export interface SidepanelSeriesContextData {
   windowId: number | undefined
   tabId: number | undefined
+  sourceUrl?: string
   seriesRevision: number | undefined
   mangaState?: MangaPageState
   items: VolumeOrChapter[]
   mangaTitle: string
   seriesId?: string
   isLoading: boolean
+  isLoadingManga?: boolean
+  isRetryingSeries?: boolean
   isChaptersLoading: boolean
   chapterListNotice?: "adult-consent-required"
   blockingMessage: string | undefined
@@ -116,15 +119,21 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       normalizeStoredSeriesContext(value, tabId, windowId, activeUrl),
     [activeUrl, tabId, windowId]
   )
-  const { value: activeTabContext, hydrated } =
-    useChromeStorageValue<ActiveTabContextValue>({
-      areaName: "session",
-      key: storageKeys,
-      initialValue: { kind: "unsupported" },
-      parse: parseStoredContext,
-    })
+  const {
+    value: activeTabContext,
+    hydrated,
+    refresh: refreshProjection,
+  } = useChromeStorageValue<ActiveTabContextValue>({
+    areaName: "session",
+    key: storageKeys,
+    initialValue: { kind: "unsupported" },
+    parse: parseStoredContext,
+  })
   const history = useSidepanelDownloadedChapters()
   const downloadedChapters = history.chapters
+  const targetKey = [windowId, tabId, activeUrl].join(":")
+  const [retry, setRetry] = useState<{ targetKey: string } | null>(null)
+  if (retry && retry.targetKey !== targetKey) setRetry(null)
 
   useEffect(() => {
     // A Side Panel can open after an MV3 worker restart or a dropped page
@@ -151,6 +160,10 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   ])
 
   const retrySeriesContext = useCallback(() => {
+    if (activeTabContext.kind !== "error" || retry?.targetKey === targetKey)
+      return
+    const attempt = { targetKey }
+    setRetry(attempt)
     void recoveryCoordinator
       .retry({
         activeTabContext,
@@ -159,15 +172,22 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
         windowId,
         sourceUrl: activeUrl,
       })
+      .then(refreshProjection)
       .catch((error) =>
         logger.debug("[sidepanel] Context retry request failed", error)
+      )
+      .finally(() =>
+        setRetry((pending) => (pending === attempt ? null : pending))
       )
   }, [
     activeTabContext,
     activeUrl,
     hydrated,
     recoveryCoordinator,
+    refreshProjection,
+    retry,
     tabId,
+    targetKey,
     windowId,
   ])
 
@@ -175,10 +195,18 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     () => deriveDownloadedSeriesContext(activeTabContext, downloadedChapters),
     [activeTabContext, downloadedChapters]
   )
+  // A window snapshot may hydrate before Chrome identifies the tracked tab.
+  const isLoading = isSeriesContextLoading(
+    hydrated,
+    windowId,
+    tabId,
+    data.isLoading
+  )
 
   return {
     windowId,
     tabId,
+    sourceUrl: activeUrl,
     seriesRevision:
       activeTabContext.kind === "ready" ? activeTabContext.revision : undefined,
     ...data,
@@ -186,16 +214,22 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     historyReadStatus: history.status,
     retryHistory: history.retry,
     retrySeriesContext:
-      activeTabContext.kind === "error" ? retrySeriesContext : undefined,
-    // Until the session snapshot has hydrated, an initial "unsupported"
-    // placeholder is not a resolved result. Keep the loading projection so a
-    // panel opening on a supported page does not flash the wrong state.
-    isLoading: isSeriesContextLoading(
-      hydrated,
-      windowId,
-      tabId,
-      data.isLoading
-    ),
+      !isLoading && activeTabContext.kind === "error"
+        ? retrySeriesContext
+        : undefined,
+    isLoading,
+    isLoadingManga:
+      hydrated &&
+      tabId !== undefined &&
+      (data.isChaptersLoading ||
+        (activeTabContext.kind === "loading" &&
+          activeUrl !== undefined &&
+          activeTabContext.sourceUrl === activeUrl)),
+    isRetryingSeries:
+      retry?.targetKey === targetKey &&
+      (data.isLoading ||
+        data.isChaptersLoading ||
+        activeTabContext.kind === "error"),
   }
 }
 

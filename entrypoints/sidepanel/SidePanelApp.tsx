@@ -14,6 +14,7 @@ import { SidePanelHeader } from "./components/SidePanelHeader"
 import { SidePanelQueueRegion } from "./components/SidePanelQueueRegion"
 import { resolveSeriesCardMessage } from "./components/SeriesContextCard"
 import { SeriesInlineSelection } from "./components/SeriesInlineSelection"
+import { MangaTabContent } from "./components/MangaTabContent"
 import { RecentDownloads } from "./components/RecentDownloads"
 import { QueueUndoProvider } from "./components/QueueUndo"
 import { useSidePanelDocumentPreferences } from "./SidePanelApp-document"
@@ -43,11 +44,13 @@ function PanelContent() {
   const [view, setView] = useState<PanelView>("queue")
   const queueTab = useRef<HTMLButtonElement>(null)
   const navigation = useRef<HTMLElement>(null)
-  const recognizedManga = Boolean(
-    data.siteId && data.seriesId && data.mangaTitle && !data.blockingMessage
-  )
+  const mangaPending = data.isLoadingManga || data.isRetryingSeries
+  const mangaError = !!data.retrySeriesContext && !mangaPending
+  const recognizedManga =
+    !data.isLoading && Boolean(data.mangaState || data.retrySeriesContext)
   const [knownManga, setKnownManga] = useState(false)
-  const hasManga = data.isLoading ? knownManga : recognizedManga
+  const hasManga =
+    recognizedManga || mangaPending || (data.isLoading && knownManga)
   if (!data.isLoading && knownManga !== recognizedManga)
     setKnownManga(recognizedManga)
   const contextNotice = resolveSeriesCardMessage(data.blockingMessage)
@@ -117,13 +120,36 @@ function PanelContent() {
             data-view={tab}
             aria-selected={visibleView === tab}
             aria-controls={"panel-view-" + tab}
+            aria-describedby={
+              tab === "manga" && (mangaPending || mangaError)
+                ? "manga-tab-status"
+                : undefined
+            }
             tabIndex={visibleView === tab ? 0 : -1}
             onClick={() => setView(tab)}
           >
             {t("sidepanel_tab_" + tab)}
+            {tab === "manga" && (
+              <span
+                className="manga-tab-cue"
+                data-status={
+                  mangaPending ? "loading" : mangaError ? "error" : undefined
+                }
+                aria-hidden="true"
+              />
+            )}
           </button>
         ))}
       </nav>
+      {hasManga && (mangaPending || mangaError) && (
+        <span id="manga-tab-status" className="sr-only">
+          {t(
+            mangaPending
+              ? "sidepanel_loadingManga"
+              : "sidepanel_seriesLoadFailed"
+          )}
+        </span>
+      )}
       <main id="sidepanel-main" className="panel-main" tabIndex={-1}>
         <section
           className="panel-page"
@@ -134,14 +160,10 @@ function PanelContent() {
         >
           <SidePanelQueueRegion
             intro={
-              data.retrySeriesContext ? (
-                <div className="panel-context-error" role="status">
-                  <span>{t("sidepanel_seriesLoadFailed")}</span>
-                  <button type="button" onClick={data.retrySeriesContext}>
-                    {t("common_retry")}
-                  </button>
-                </div>
-              ) : contextNotice && queue.queueView.length === 0 ? (
+              !hasManga &&
+              !data.isLoading &&
+              contextNotice &&
+              queue.queueView.length === 0 ? (
                 <p className="panel-empty">{contextNotice.description}</p>
               ) : null
             }
@@ -173,17 +195,23 @@ function PanelContent() {
             aria-labelledby="panel-tab-manga"
             hidden={visibleView !== "manga"}
           >
-            <SeriesInlineSelection
-              key={[data.windowId, data.tabId, data.seriesRevision].join(":")}
+            <MangaTabContent
+              key={[data.windowId, data.tabId, data.sourceUrl].join(":")}
               data={data}
-              chapterSelectionsBySeries={selection.chapterSelectionsBySeries}
-              setChapterSelectionsBySeries={
-                selection.setChapterSelectionsBySeries
-              }
-              presentationBySeries={selection.presentationBySeries}
-              setPresentationBySeries={selection.setPresentationBySeries}
-              onAfterStart={openQueue}
-            />
+              visible={visibleView === "manga"}
+            >
+              <SeriesInlineSelection
+                key={[data.windowId, data.tabId, data.seriesRevision].join(":")}
+                data={data}
+                chapterSelectionsBySeries={selection.chapterSelectionsBySeries}
+                setChapterSelectionsBySeries={
+                  selection.setChapterSelectionsBySeries
+                }
+                presentationBySeries={selection.presentationBySeries}
+                setPresentationBySeries={selection.setPresentationBySeries}
+                onAfterStart={openQueue}
+              />
+            </MangaTabContent>
           </section>
         )}
         <section

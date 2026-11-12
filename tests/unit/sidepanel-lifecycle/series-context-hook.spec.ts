@@ -132,6 +132,23 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+it("shows manga loading only for the tracked URL", async () => {
+  storedContext = {
+    2: {
+      ...readyContext()[2],
+      context: { loading: true, sourceUrl: url },
+    },
+  }
+  await act(async () => root.render(createElement(View)))
+  expect(state.isLoadingManga).toBe(true)
+
+  const newUrl = "https://mangadex.org/"
+  const navigated = { ...tab, url: newUrl }
+  query.mockResolvedValue([navigated])
+  await act(async () => updated.emit(tab.id, { url: newUrl }, navigated))
+  expect(state.isLoadingManga).toBe(false)
+})
+
 it("renders the exact tab projection and applies only the newest downloaded chapter response", async () => {
   await act(async () => root.render(createElement(View)))
   expect(container.textContent).toBe("Series")

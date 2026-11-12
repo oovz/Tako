@@ -8,8 +8,77 @@ import {
 } from "./fixtures/state-helpers"
 import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains-constants"
 import { ShonenJumpPlus } from "./fixtures/mock-data"
+import { SHONENJUMPPLUS_LOCAL_SITE_PREFIX } from "./fixtures/mock-data/site-integrations/shonenjumpplus/local-server"
 
 test.describe("Shonen Jump+ navigation", () => {
+  test("opens Manga while the chapter catalog is pending", async ({
+    context,
+    extensionId,
+    page,
+    _extensionContextState,
+  }) => {
+    const server = _extensionContextState.localMockServer
+    if (!server) throw new Error("Shonen Jump+ mock server is unavailable")
+    const { promise: release, resolve } = Promise.withResolvers<void>()
+    let requested = false
+    server.addRoute(
+      `${SHONENJUMPPLUS_LOCAL_SITE_PREFIX}/api/viewer/readable_product_pagination_information`,
+      async ({ url }) => {
+        requested = true
+        await release
+        return {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          body: ShonenJumpPlus.buildReadableProductPaginationInfoResponse(
+            url.searchParams.get("aggregate_id") ?? ""
+          ),
+        }
+      }
+    )
+    await page.goto(SHONENJUMPPLUS_BASE_URL, { waitUntil: "domcontentloaded" })
+    const panel = await openSidepanelHarness(context, extensionId, page)
+    try {
+      const queueTab = panel.getByRole("tab", { name: "Queue", exact: true })
+      const mangaTab = panel.getByRole("tab", { name: "Manga", exact: true })
+      const mangaView = panel.getByRole("tabpanel", { name: "Manga" })
+      const progress = mangaView
+        .getByRole("status")
+        .filter({ hasText: "Loading manga info…" })
+      await expect(queueTab).toHaveAttribute("aria-selected", "true")
+      await expect(mangaTab).toHaveCount(0)
+      const { seriesId, seriesTitle } = ShonenJumpPlus.BASIC_SERIES.series
+      await page.bringToFront()
+      await page.goto(`${SHONENJUMPPLUS_BASE_URL}/episode/${seriesId}`, {
+        waitUntil: "domcontentloaded",
+      })
+      await expect.poll(() => requested).toBe(true)
+      await expect(queueTab).toHaveAttribute("aria-selected", "true")
+      await expect(mangaTab).toHaveAccessibleDescription("Loading manga info…")
+      await panel.emulateMedia({ reducedMotion: "reduce" })
+      const cue = mangaTab.locator(".manga-tab-cue")
+      await expect(cue).toBeVisible()
+      expect(
+        await cue.evaluate(
+          (element) => getComputedStyle(element, "::before").animationName
+        )
+      ).toBe("none")
+      await queueTab.press("ArrowRight")
+      await expect(mangaTab).toBeFocused()
+      await expect(progress).toBeVisible({ timeout: 3_000 })
+      await expect(mangaView.getByRole("checkbox")).toHaveCount(0)
+
+      resolve()
+      await expect(
+        mangaView.getByRole("heading", { name: seriesTitle })
+      ).toBeVisible()
+      await expect(mangaTab).toHaveAttribute("aria-selected", "true")
+      await expect(mangaTab).not.toHaveAttribute("aria-describedby")
+    } finally {
+      resolve()
+      await panel.close()
+    }
+  })
+
   test("front page -> episode page initializes tab state", async ({
     context,
     extensionId,
