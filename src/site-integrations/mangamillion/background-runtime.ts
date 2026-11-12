@@ -182,6 +182,7 @@ async function resolveMangaMillionSeriesData(
     seriesTitle: seriesMetadata.title,
     authorName: seriesMetadata.author,
   })
+  // The title page's total includes chapters unavailable in the selected language.
   const total = chapterListData.totalChapters
   if (total !== undefined && total > 0 && total <= 2_147_483_647)
     seriesMetadata.chapterCount = total

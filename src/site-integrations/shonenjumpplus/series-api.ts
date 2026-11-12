@@ -46,6 +46,7 @@ function isExplicitlyFree(status: ProductStatus | undefined): boolean {
 function releaseDateInJapan(timestamp: unknown): string | undefined {
   const parsed = ReleaseTimestampSchema.safeParse(timestamp)
   if (!parsed.success) return undefined
+  // The API sends UTC timestamps, and episode pages show Japan-local dates.
   const japanTime = Date.parse(parsed.data) + JAPAN_UTC_OFFSET_MS
   const date = new Date(japanTime).toISOString().split("T")[0]
   return ChapterReleaseDateSchema.safeParse(date).data

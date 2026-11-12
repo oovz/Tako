@@ -54,6 +54,7 @@ export function pickChapterArchiveMetadata(
 ): ChapterArchiveMetadata {
   const { releaseDate, scanInformation, blackAndWhite, readingDirection } =
     chapter
+  // Older snapshot codecs reject extra keys even when their values are undefined.
   return {
     ...(releaseDate !== undefined ? { releaseDate } : {}),
     ...(scanInformation !== undefined ? { scanInformation } : {}),

@@ -178,6 +178,8 @@ describe("Mangago content contracts", () => {
       ],
       communityRating: 4.3,
     })
+    // Mangago shows 2000 for this title. Kadokawa dates volume 1 to 2018.
+    // https://store.kadokawa.co.jp/shop/g/g321802000494/
     expect(result.seriesMetadata?.year).toBeUndefined()
     expect(result.seriesMetadata?.description).toContain(
       "Royal Capital’s Adventurer’s School"

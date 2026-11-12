@@ -142,6 +142,8 @@ test.describe("MangaDex downloads", () => {
         options,
         new TextDecoder().decode(contents["ComicInfo.xml"])
       )
+      // Chapter 420's Spanish edition supplies this date and scanlation credit.
+      // https://api.mangadex.org/chapter/86a76ac5-9ea9-4fec-bc23-0720d1ac6f32?includes%5B%5D=scanlation_group
       expect(metadata).toMatchObject({
         Year: "2026",
         Month: "9",

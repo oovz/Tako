@@ -91,6 +91,8 @@ function buildSeriesMetadata(
       title.language
     ],
     publisher: "Shueisha",
+    // Teen Plus and Mature lack matching ComicInfo age tiers.
+    // https://mangaplus.shueisha.co.jp/rating/eng
     contentRating: ["all ages", "teen"][detail.rating],
   }
 }

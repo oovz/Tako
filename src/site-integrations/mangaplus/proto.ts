@@ -167,6 +167,7 @@ function readDetailField(
 function detail(data: Uint8Array, budget: Budget): MangaPlusTitleDetail {
   const value: MangaPlusTitleDetail = {
     description: "",
+    // An omitted protobuf rating uses 0, the All Age tier.
     rating: 0,
     chapters: [],
   }
