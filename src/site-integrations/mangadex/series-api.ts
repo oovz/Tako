@@ -1,3 +1,4 @@
+import { z } from "zod"
 import type { Chapter } from "../../types/chapter"
 import type { SeriesMetadata } from "../../types/series-metadata"
 import type { SeriesChapterListResult } from "../../types/site-integrations"
@@ -63,7 +64,7 @@ function extractAlternativeTitles(
 }
 
 function formatPublicationDemographic(
-  value: string | undefined
+  value: string | null | undefined
 ): string | undefined {
   if (typeof value !== "string" || value.trim().length === 0) {
     return undefined
@@ -91,12 +92,17 @@ function buildCoverUrl(
   return `${MANGADEX_UPLOADS_BASE}/covers/${mangaId}/${fileName}`
 }
 
-function extractRelationshipName(
-  relationships: MangadexRelationship[],
-  role: "author" | "artist"
+function extractRelationshipNames(
+  relationships: MangadexRelationship[] | undefined,
+  role: "author" | "artist" | "scanlation_group"
 ): string | undefined {
-  return relationships.find((relationship) => relationship.type === role)
-    ?.attributes?.name as string | undefined
+  const names = relationships?.flatMap(({ type, attributes }) => {
+    const name = attributes?.name
+    return type === role && typeof name === "string" && name.trim()
+      ? [name.trim()]
+      : []
+  })
+  return [...new Set(names)].join(", ") || undefined
 }
 
 function mapMangadexReadingDirection(
@@ -135,10 +141,16 @@ function extractMangadexTaxonomy(
   const publicationDemographic = formatPublicationDemographic(
     attrs.publicationDemographic
   )
+  const genreNames = attrs.tags
+    ?.filter(
+      ({ attributes }) => !attributes.group || attributes.group === "genre"
+    )
+    .map(({ attributes }) => attributes.name.en)
+    .filter(Boolean)
   const genres = Array.from(
     new Set([
       ...(publicationDemographic ? [publicationDemographic] : []),
-      ...(tagNames ?? []),
+      ...(genreNames ?? []),
     ])
   )
   const tags =
@@ -172,8 +184,8 @@ export async function fetchMangadexSeriesMetadata(
   const title = extractPreferredTitle(attrs.title, attrs.altTitles)
   return {
     title,
-    author: extractRelationshipName(data.data.relationships, "author"),
-    artist: extractRelationshipName(data.data.relationships, "artist"),
+    author: extractRelationshipNames(data.data.relationships, "author"),
+    artist: extractRelationshipNames(data.data.relationships, "artist"),
     description:
       attrs.description?.en || Object.values(attrs.description || {})[0],
     ...extractMangadexTaxonomy(attrs),
@@ -183,13 +195,15 @@ export async function fetchMangadexSeriesMetadata(
       ? mapCommunityRatingToFiveScale(statisticsResult, seriesId)
       : undefined,
     contentRating: attrs.contentRating,
-    year: attrs.year,
+    year: attrs.year ?? undefined,
     language: attrs.originalLanguage,
     alternativeTitles: extractAlternativeTitles(attrs.altTitles, title),
   }
 }
 
 type MangadexFeedChapter = MangadexChapterFeedResponse["data"][number]
+
+const MangaDexPublishTimeSchema = z.iso.datetime({ offset: true })
 
 function isDownloadableMangadexChapter(entry: MangadexFeedChapter): boolean {
   const attrs = entry.attributes
@@ -255,6 +269,13 @@ function mapFeedChapterToChapter(entry: MangadexFeedChapter): Chapter | null {
     title,
     locked: false,
     language: attrs.translatedLanguage,
+    releaseDate: MangaDexPublishTimeSchema.safeParse(
+      attrs.publishAt
+    ).data?.slice(0, 10),
+    scanInformation: extractRelationshipNames(
+      entry.relationships,
+      "scanlation_group"
+    ),
     ...mapMangadexChapterPosition(attrs),
     ...mapMangadexChapterVolume(attrs.volume),
     comicInfo: { Title: title, LanguageISO: attrs.translatedLanguage },

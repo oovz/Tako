@@ -79,10 +79,12 @@ export type MangadexMangaResponse = {
       description?: Record<string, string>
       contentRating?: string
       originalLanguage?: string
-      publicationDemographic?: string
+      publicationDemographic?: string | null
       status?: string
-      tags?: Array<{ attributes: { name: Record<string, string> } }>
-      year?: number
+      tags?: Array<{
+        attributes: { name: Record<string, string>; group?: string }
+      }>
+      year?: number | null
     }
     relationships: MangadexRelationship[]
   }
@@ -100,7 +102,9 @@ export type MangadexChapterFeedResponse = {
       translatedLanguage?: string
       pages?: number
       externalUrl?: string | null
+      publishAt?: string | null
     }
+    relationships?: MangadexRelationship[]
   }>
   total: number
   offset: number
@@ -129,7 +133,7 @@ const MangadexMangaResponseSchema = z
             description: z.record(z.string(), z.string()).optional(),
             contentRating: z.string().optional(),
             originalLanguage: z.string().optional(),
-            publicationDemographic: z.string().optional(),
+            publicationDemographic: z.string().nullish(),
             status: z.string().optional(),
             tags: z
               .array(
@@ -138,13 +142,14 @@ const MangadexMangaResponseSchema = z
                     attributes: z
                       .object({
                         name: z.record(z.string(), z.string()),
+                        group: z.string().optional(),
                       })
                       .passthrough(),
                   })
                   .passthrough()
               )
               .optional(),
-            year: z.number().optional(),
+            year: z.number().nullish(),
           })
           .passthrough(),
         relationships: z.array(MangadexRelationshipSchema),
@@ -190,8 +195,10 @@ const MangadexChapterFeedResponseSchema = z
               translatedLanguage: z.string().optional(),
               pages: z.number().optional(),
               externalUrl: z.string().nullable().optional(),
+              publishAt: z.string().nullish(),
             })
             .passthrough(),
+          relationships: z.array(MangadexRelationshipSchema).optional(),
         })
         .passthrough()
     ),
@@ -542,6 +549,7 @@ export async function fetchChapterFeed(
   signal?: AbortSignal
 ): Promise<MangadexChapterFeedResponse> {
   const params = new URLSearchParams({
+    "includes[]": "scanlation_group",
     "order[chapter]": "asc",
     "order[volume]": "asc",
     offset: String(offset),

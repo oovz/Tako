@@ -225,8 +225,16 @@
             "title": "Encuentro",
             "translatedLanguage": "es-la",
             "externalUrl": null,
-            "pages": 18
-          }
+            "pages": 18,
+            "publishAt": "2026-09-09T18:42:55+00:00"
+          },
+          "relationships": [
+            {
+              "id": "group-yayanken",
+              "type": "scanlation_group",
+              "attributes": { "name": "YaYanKen" }
+            }
+          ]
         },
         {
           "id": "67a2a00d-f3ed-420d-9bd9-8456d2892a26",

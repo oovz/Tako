@@ -574,7 +574,7 @@ describe("MangaDex site integration", () => {
   })
 
   describe("fetchSeriesMetadata", () => {
-    it("extracts title, author, and cover URL", async () => {
+    it("keeps distinct creator credits and separates genre from other MangaDex tags", async () => {
       const mangaId = "db692d58-4b13-4174-ae8c-30c515c0689c"
       const mockMangaResponse = {
         result: "ok",
@@ -594,8 +594,8 @@ describe("MangaDex site integration", () => {
             status: "ongoing",
             year: 2022,
             tags: [
-              { attributes: { name: { en: "Action" } } },
-              { attributes: { name: { en: "Comedy" } } },
+              { attributes: { name: { en: "Action" }, group: "genre" } },
+              { attributes: { name: { en: "Animals" }, group: "theme" } },
             ],
           },
           relationships: [
@@ -608,6 +608,11 @@ describe("MangaDex site integration", () => {
               id: "artist-uuid",
               type: "artist",
               attributes: { name: "Test Artist" },
+            },
+            {
+              id: "second-author-uuid",
+              type: "author",
+              attributes: { name: "Second Author" },
             },
             {
               id: "cover-uuid",
@@ -626,7 +631,7 @@ describe("MangaDex site integration", () => {
       const metadata = await fetchMangadexMetadata(mangaId)
 
       expect(metadata.title).toBe("Test Manga Title")
-      expect(metadata.author).toBe("Test Author")
+      expect(metadata.author).toBe("Test Author, Second Author")
       expect(metadata.description).toBe("A test manga description.")
       expect(metadata.status).toBe("ongoing")
       expect(metadata.language).toBe("ja")
@@ -638,9 +643,8 @@ describe("MangaDex site integration", () => {
         "テストマンガタイトル",
         "Titre alternatif",
       ])
-      expect(metadata.genres).toContain("Action")
-      expect(metadata.genres).toContain("Seinen")
-      expect(metadata.tags).toEqual(["Action", "Comedy"])
+      expect(metadata.genres).toEqual(["Seinen", "Action"])
+      expect(metadata.tags).toEqual(["Action", "Animals"])
       expect(metadata.coverUrl).toContain(mangaId)
       expect(metadata.coverUrl).toContain("cover.jpg")
     })

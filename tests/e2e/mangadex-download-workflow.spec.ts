@@ -10,6 +10,7 @@ import {
 } from "./fixtures/state-helpers"
 import { MANGADEX_BASE_URL } from "./fixtures/test-domains-constants"
 import { Mangadex } from "./fixtures/mock-data"
+import { inspectComicInfo } from "./fixtures/chapter-artifact"
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
 import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
 import { MANGADEX_LOCAL_API_PREFIX } from "./fixtures/mock-data/site-integrations/mangadex/local-server"
@@ -137,6 +138,16 @@ test.describe("MangaDex downloads", () => {
             /\.(png|jpe?g|webp)$/i.test(name) && bytes.length > 0
         )
       ).toBe(true)
+      const metadata = await inspectComicInfo(
+        options,
+        new TextDecoder().decode(contents["ComicInfo.xml"])
+      )
+      expect(metadata).toMatchObject({
+        Year: "2026",
+        Month: "9",
+        Day: "9",
+        ScanInformation: "YaYanKen",
+      })
       await options
         .getByRole("button", { name: "Activity & History", exact: true })
         .click()
