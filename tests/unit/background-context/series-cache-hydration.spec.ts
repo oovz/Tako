@@ -170,7 +170,10 @@ describe("canonical series cache hydration", () => {
     })
     try {
       await vi.waitFor(() => expect(fetchNetwork).toHaveBeenCalled())
-      expect(currentProjection()?.context).toEqual({ loading: true })
+      expect(currentProjection()?.context).toEqual({
+        loading: true,
+        sourceUrl: url,
+      })
       expect(await cache.getCurrentSeriesContext(7, 2)).toBeUndefined()
     } finally {
       delivery.resolve()
@@ -187,11 +190,18 @@ describe("canonical series cache hydration", () => {
       jsonResponse(String(input), { error: "Unavailable" }, 503)
     )
     await resolver().resolveTabContext(7, { windowId: 2 })
-    expect(cache.getCachedContext(7)).toEqual({ error: expect.any(String) })
+    expect(cache.getCachedContext(7)).toEqual({
+      error: expect.any(String),
+      sourceUrl: url,
+    })
+    cache.deleteCachedContext(7)
     fetchNetwork.mockClear()
     await resolver().resolveTabContext(7, { windowId: 2, allowCached: true })
     expect(fetchNetwork).not.toHaveBeenCalled()
-    expect(currentProjection()?.context).toEqual({ error: expect.any(String) })
+    expect(currentProjection()?.context).toEqual({
+      error: expect.any(String),
+      sourceUrl: url,
+    })
     fetchNetwork.mockImplementation(network)
     await resolver().resolveTabContext(7, {
       windowId: 2,

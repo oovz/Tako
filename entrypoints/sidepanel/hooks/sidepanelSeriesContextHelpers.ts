@@ -6,6 +6,7 @@ import {
   isLoadingTabContext,
   isMangaPageState,
   parseActiveTabContextByWindow,
+  TabContextErrorSchema,
 } from "@/src/runtime/tab-state-schemas"
 import type { MangaPageState, WindowTabContext } from "@/src/types/tab-state"
 
@@ -25,8 +26,8 @@ export interface DerivedSidepanelSeriesContextData {
 
 export type ActiveTabContextValue =
   | { kind: "ready"; mangaState: MangaPageState; revision?: number }
-  | { kind: "error"; error: string }
-  | { kind: "loading" }
+  | { kind: "error"; error: string; sourceUrl?: string }
+  | { kind: "loading"; sourceUrl?: string }
   | { kind: "unsupported" }
 
 export function selectPreferredSeriesContextTask(
@@ -48,14 +49,6 @@ export function selectPreferredSeriesContextTask(
   return tasks
     .filter((task) => task.status === "queued")
     .sort(byCreatedAscending)[0]
-}
-
-function isErrorContext(value: unknown): value is { error: string } {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as { error?: unknown }).error === "string"
-  )
 }
 
 function normalizeBlockingMessage(error: string): string {
@@ -134,12 +127,14 @@ export function normalizeActiveTabContext(
   }
 
   if (isLoadingTabContext(value)) {
-    return { kind: "loading" }
+    return {
+      kind: "loading",
+      ...(value.sourceUrl ? { sourceUrl: value.sourceUrl } : {}),
+    }
   }
 
-  if (isErrorContext(value)) {
-    return { kind: "error", error: value.error }
-  }
+  const error = TabContextErrorSchema.safeParse(value).data
+  if (error) return { kind: "error", ...error }
 
   return { kind: "unsupported" }
 }
@@ -172,8 +167,11 @@ export function normalizeStoredSeriesContext(
       windowContext.revision
     )
     if (
-      normalized.kind === "ready" &&
-      normalized.mangaState.sourceUrl !== activeUrl
+      (normalized.kind === "ready" &&
+        normalized.mangaState.sourceUrl !== activeUrl) ||
+      (normalized.kind === "error" &&
+        normalized.sourceUrl !== undefined &&
+        normalized.sourceUrl !== activeUrl)
     ) {
       return { kind: "loading" }
     }

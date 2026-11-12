@@ -415,7 +415,10 @@ describe("navigation and window projection workflows", () => {
     h.domReady.fire({ tabId: 101, frameId: 0, url: seriesUrl(101) })
     await gate.entered.promise
     const loading = structuredClone(h.window())
-    expect(loading.context).toEqual({ loading: true })
+    expect(loading.context).toEqual({
+      loading: true,
+      sourceUrl: seriesUrl(101),
+    })
     h.tabs.get(101)!.url = "about:blank"
     h.tabs.set(103, browserTab(103, 1, unsupportedUrl, false))
     try {

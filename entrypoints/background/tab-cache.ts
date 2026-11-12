@@ -6,6 +6,7 @@ import {
   isLoadingTabContext,
   isMangaPageState,
   parseActiveTabContextByWindow,
+  TabContextErrorSchema,
 } from "@/src/runtime/tab-state-schemas"
 import {
   isExtensionUrl as isExtensionPageUrl,
@@ -16,12 +17,12 @@ import type {
   ActiveTabContextByWindow,
   MangaPageState,
   ProjectedTabContext,
+  TabContextError,
   WindowTabContext,
 } from "@/src/types/tab-state"
 
-type TabContextError = { error: string }
 export type TabContextCacheValue = MangaPageState | TabContextError | null
-export type ActiveTabContextValue = TabContextCacheValue | { loading: true }
+export type ActiveTabContextValue = ProjectedTabContext
 
 interface ProjectionCommitOptions {
   requestId?: number
@@ -48,7 +49,11 @@ const MAX_TAB_CACHE_SIZE = 100
 interface TabCacheDependencies {
   readSession: (keys: string[]) => Promise<Record<string, unknown>>
   writeSession: (values: Record<string, unknown>) => Promise<void>
-  queryActiveTabs: () => Promise<Array<{ id?: number; windowId?: number }>>
+  queryActiveTabs: () => Promise<
+    Array<
+      Partial<Pick<chrome.tabs.Tab, "id" | "windowId" | "url" | "pendingUrl">>
+    >
+  >
   getTab: (tabId: number) => Promise<
     | (Pick<chrome.tabs.Tab, "url" | "pendingUrl"> & {
         active?: boolean
@@ -102,7 +107,7 @@ class TabContextCache {
     if (typeof maybeError === "string" && maybeError.length > 0) {
       return { error: maybeError }
     }
-    return null
+    return TabContextErrorSchema.safeParse(maybeError).data ?? null
   }
 
   private async readActiveTabContextByWindow(): Promise<ActiveTabContextByWindow> {
@@ -162,29 +167,50 @@ class TabContextCache {
       // Re-check ownership at the serialized write boundary. Any active-tab
       // snapshot read before this queue turn may have become stale while a
       // newer activation was being processed.
-      const activeTabs = await this.dependencies.queryActiveTabs()
-      const ownsWindow = ownsActiveWindow(activeTabs, activeTabId, windowId)
-      if (!ownsWindow) {
+      const activeTab = (await this.dependencies.queryActiveTabs()).find(
+        (tab) =>
+          tab.id === activeTabId &&
+          (tab.windowId === undefined || tab.windowId === windowId)
+      )
+      if (!activeTab) {
         logger.debug("[tab-cache] Skipping projection for inactive tab", {
           tabId: activeTabId,
           windowId,
         })
         return undefined
       }
+      const url = isLoadingTabContext(context)
+        ? resolveTabUrlForSupportCheck(activeTab)
+        : ""
+      const projectedContext =
+        url && matchUrl(url)
+          ? { loading: true as const, sourceUrl: url }
+          : context
       const contexts = await this.readActiveTabContextByWindow()
       const currentWindowContext = contexts[windowId]
-      if (
+      const currentRevision = currentWindowContext?.revision ?? 0
+      const currentContext = currentWindowContext?.context
+      const reusesLoadingRevision =
         !supersedeCurrent &&
         currentWindowContext?.activeTabId === activeTabId &&
-        isLoadingTabContext(currentWindowContext.context) &&
-        isLoadingTabContext(context)
+        isLoadingTabContext(currentContext) &&
+        isLoadingTabContext(projectedContext)
+      if (
+        reusesLoadingRevision &&
+        currentContext.sourceUrl === projectedContext.sourceUrl
       ) {
-        return currentWindowContext.revision
+        return currentRevision
       }
-      const currentRevision = currentWindowContext?.revision ?? 0
-      const nextRevision = currentRevision + 1
+      const nextRevision = reusesLoadingRevision
+        ? currentRevision
+        : currentRevision + 1
       await this.writeWindowContext(
-        this.buildWindowContext(windowId, activeTabId, context, nextRevision)
+        this.buildWindowContext(
+          windowId,
+          activeTabId,
+          projectedContext,
+          nextRevision
+        )
       )
       return nextRevision
     })
@@ -702,15 +728,3 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
 }
 
 export const tabContextCache = createTabContextCache()
-
-function ownsActiveWindow(
-  tabs: Array<{ id?: number; windowId?: number }>,
-  tabId: number,
-  windowId: number
-): boolean {
-  return tabs.some(
-    (tab) =>
-      tab.id === tabId &&
-      (tab.windowId === undefined || tab.windowId === windowId)
-  )
-}

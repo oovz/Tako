@@ -85,17 +85,24 @@ export class TabContextStateService {
     }
 
     if (typedPayload.context === "error") {
+      const sourceUrl = options?.expectedUrl
+      const errorContext = {
+        error: typedPayload.error,
+        ...(sourceUrl ? { sourceUrl } : {}),
+      }
       const applied = await this.projection.commitTabContextMutation(
         tabId,
         options,
         async () => {
           await chrome.storage.session.remove(tabStateKey)
-          await chrome.storage.session.set({ [errorKey]: typedPayload.error })
-          return { error: typedPayload.error }
+          await chrome.storage.session.set({
+            [errorKey]: sourceUrl ? errorContext : typedPayload.error,
+          })
+          return errorContext
         }
       )
       return applied
-        ? { success: true, tabState: { error: typedPayload.error } }
+        ? { success: true, tabState: errorContext }
         : { success: true }
     }
 

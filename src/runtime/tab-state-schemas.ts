@@ -8,8 +8,10 @@ import {
 import type {
   ActiveTabContextByWindow,
   ChapterState,
+  LoadingTabContext,
   MangaPageState,
   ProjectedTabContext,
+  TabContextError,
   VolumeState,
   WindowTabContext,
 } from "@/src/types/tab-state"
@@ -73,10 +75,20 @@ export const MangaPageStateSchema = z.strictObject({
   lastUpdated: NonNegativeIntegerSchema,
 }) satisfies z.ZodType<MangaPageState>
 
+const LoadingTabContextSchema = z.strictObject({
+  loading: z.literal(true),
+  sourceUrl: NonEmptyStringSchema.optional(),
+}) satisfies z.ZodType<LoadingTabContext>
+
+export const TabContextErrorSchema = z.strictObject({
+  error: NonEmptyStringSchema,
+  sourceUrl: NonEmptyStringSchema.optional(),
+}) satisfies z.ZodType<TabContextError>
+
 export const ProjectedTabContextSchema = z.union([
   MangaPageStateSchema,
-  z.strictObject({ loading: z.literal(true) }),
-  z.strictObject({ error: NonEmptyStringSchema }),
+  LoadingTabContextSchema,
+  TabContextErrorSchema,
   z.null(),
 ]) satisfies z.ZodType<ProjectedTabContext>
 
@@ -139,10 +151,6 @@ export function isActiveTabContextByWindow(
 
 export function isLoadingTabContext(
   value: unknown
-): value is { loading: true } {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    (value as { loading?: unknown }).loading === true
-  )
+): value is LoadingTabContext {
+  return LoadingTabContextSchema.safeParse(value).success
 }

@@ -42,8 +42,19 @@ export interface MangaPageState {
   lastUpdated: number
 }
 
+export interface LoadingTabContext {
+  loading: true
+  /** URL matched to an enabled integration while resolving the series. */
+  sourceUrl?: string
+}
+
+export interface TabContextError {
+  error: string
+  sourceUrl?: string
+}
+
 export type ProjectedTabContext =
-  MangaPageState | { loading: true } | { error: string } | null
+  MangaPageState | LoadingTabContext | TabContextError | null
 
 export interface WindowTabContext {
   windowId: number

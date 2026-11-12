@@ -49,7 +49,23 @@ describe("active window projection discovery", () => {
     await cache().handleTabActivated(7)
     expect(
       session[SESSION_STORAGE_KEYS.activeTabContextByWindow]
-    ).toMatchObject({ 2: { activeTabId: 7, context: { loading: true } } })
+    ).toMatchObject({
+      2: { activeTabId: 7, context: { loading: true, sourceUrl } },
+    })
+  })
+  it("adds the supported URL to an existing loading projection without replacing its owner", async () => {
+    query.mockResolvedValueOnce([{ id: 7, windowId: 2 }])
+    const contextCache = cache()
+    const original = await contextCache.projectLoadingForTab(7, 2)
+    expect(await contextCache.projectLoadingForTab(7, 2)).toEqual(original)
+    expect(
+      session[SESSION_STORAGE_KEYS.activeTabContextByWindow]
+    ).toMatchObject({
+      2: {
+        revision: original?.requestId,
+        context: { loading: true, sourceUrl },
+      },
+    })
   })
   it("recovers the active window after the first tab lookup fails", async () => {
     getTab.mockRejectedValueOnce(new Error("tab snapshot unavailable"))

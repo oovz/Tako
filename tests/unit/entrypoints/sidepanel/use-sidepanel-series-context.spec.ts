@@ -369,6 +369,33 @@ describe("activeTabContext mapping", () => {
     ).toEqual({ kind: "loading" })
   })
 
+  it("offers recovery only on the URL that produced the series error", () => {
+    const sourceUrl = "https://mangadex.org/title/old/series"
+    const error = "Series unavailable"
+    const projection = {
+      2: {
+        windowId: 2,
+        activeTabId: 17,
+        revision: 4,
+        timestamp: 1,
+        context: { sourceUrl, error },
+      },
+    }
+    expect(normalizeStoredSeriesContext(projection, 17, 2, sourceUrl)).toEqual({
+      kind: "error",
+      sourceUrl,
+      error,
+    })
+    expect(
+      normalizeStoredSeriesContext(
+        projection,
+        17,
+        2,
+        "https://mangadex.org/title/new/series"
+      )
+    ).toEqual({ kind: "loading" })
+  })
+
   it("normalizes unsupported/null context for an extension options page to unsupported and not detected", () => {
     const normalized = normalizeStoredSeriesContext(
       {

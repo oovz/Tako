@@ -75,7 +75,11 @@ function isCachedContextForUrl(
   value: TabContextCacheValue,
   expectedUrl: string
 ): boolean {
-  return value === null || "error" in value || value.sourceUrl === expectedUrl
+  return (
+    value === null ||
+    value.sourceUrl === undefined ||
+    value.sourceUrl === expectedUrl
+  )
 }
 
 class PageProbeUrlMismatchError extends Error {
