@@ -294,6 +294,7 @@ export default defineBackground({
 
     // Event listeners are registered synchronously below. Versioned state
     // migration gates every storage-backed readiness phase and DNR read.
+    // The manifest's window-wide Side Panel keeps one document across tab switches.
     try {
       chrome.sidePanel
         .setPanelBehavior({ openPanelOnActionClick: true })

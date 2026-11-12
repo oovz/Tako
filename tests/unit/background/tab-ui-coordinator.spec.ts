@@ -26,7 +26,6 @@ describe("createTabUiCoordinator", () => {
   const actionSetIcon = vi.fn(async () => undefined)
   const actionSetBadgeText = vi.fn(async () => undefined)
   const actionSetBadgeBackgroundColor = vi.fn(async () => undefined)
-  const sidePanelSetOptions = vi.fn(async () => undefined)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -37,9 +36,6 @@ describe("createTabUiCoordinator", () => {
         setIcon: actionSetIcon,
         setBadgeText: actionSetBadgeText,
         setBadgeBackgroundColor: actionSetBadgeBackgroundColor,
-      },
-      sidePanel: {
-        setOptions: sidePanelSetOptions,
       },
     })
   })
@@ -126,24 +122,6 @@ describe("createTabUiCoordinator", () => {
     ).resolves.toBeUndefined()
     expect(mocks.loggerDebug).toHaveBeenCalledWith(
       "updateActionForTab noop/error",
-      expect.any(Error)
-    )
-  })
-
-  it("enables the side panel and contains errors for tabs removed mid-update", async () => {
-    const coordinator = createTabUiCoordinator()
-
-    await coordinator.updateSidePanelForTab(12)
-    expect(sidePanelSetOptions).toHaveBeenCalledWith({
-      tabId: 12,
-      path: "sidepanel.html",
-      enabled: true,
-    })
-
-    sidePanelSetOptions.mockRejectedValueOnce(new Error("tab replaced"))
-    await expect(coordinator.updateSidePanelForTab(13)).resolves.toBeUndefined()
-    expect(mocks.loggerDebug).toHaveBeenCalledWith(
-      "Failed to set side panel options (non-fatal):",
       expect.any(Error)
     )
   })

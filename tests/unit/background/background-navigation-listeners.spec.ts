@@ -47,7 +47,6 @@ describe("background navigation listeners", () => {
       },
       tabUiCoordinator: {
         updateActionForTab: vi.fn(async () => undefined),
-        updateSidePanelForTab: vi.fn(async () => undefined),
       },
     }
   }
@@ -348,8 +347,9 @@ describe("background navigation listeners", () => {
     updatedListener(7, { status: "complete" }, tab)
 
     await vi.waitFor(() =>
-      expect(deps.tabUiCoordinator.updateSidePanelForTab).toHaveBeenCalledWith(
-        7
+      expect(deps.tabUiCoordinator.updateActionForTab).toHaveBeenCalledWith(
+        7,
+        tab.url
       )
     )
     expect(deps.tabContextCache.handleTabUpdated).not.toHaveBeenCalled()
@@ -376,8 +376,9 @@ describe("background navigation listeners", () => {
     } as chrome.tabs.Tab)
 
     await vi.waitFor(() =>
-      expect(deps.tabUiCoordinator.updateSidePanelForTab).toHaveBeenCalledWith(
-        7
+      expect(deps.tabUiCoordinator.updateActionForTab).toHaveBeenCalledWith(
+        7,
+        "https://mangadex.org/title/series-1"
       )
     )
     expect(deps.tabContextCache.handleTabUpdated).not.toHaveBeenCalled()
@@ -631,9 +632,7 @@ describe("background navigation listeners", () => {
     // 2. Complete event
     listener(776, { status: "complete" }, tab)
     await vi.waitFor(() =>
-      expect(deps.tabUiCoordinator.updateSidePanelForTab).toHaveBeenCalledWith(
-        776
-      )
+      expect(deps.tabUiCoordinator.updateActionForTab).toHaveBeenCalledTimes(2)
     )
     // clearTabState should NOT be called a second time
     expect(deps.clearTabState).toHaveBeenCalledTimes(1)

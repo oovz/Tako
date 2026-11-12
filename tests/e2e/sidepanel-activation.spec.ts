@@ -371,7 +371,7 @@ test.describe("Side Panel activation", () => {
     await page.close()
   })
 
-  test("updates side panel when switching between tabs", async ({
+  test("keeps the Side Panel open when switching to an unsupported tab", async ({
     context,
     extensionId,
   }) => {
@@ -380,7 +380,8 @@ test.describe("Side Panel activation", () => {
     await unsupportedPage.goto(buildExampleUrl("/"), {
       waitUntil: "domcontentloaded",
     })
-    await getTabId(unsupportedPage, context)
+    const unsupportedTabId = await getTabId(unsupportedPage, context)
+    await waitForActionTitle(context, unsupportedTabId, "Unsupported")
 
     // Create a supported tab
     const supportedPage = await context.newPage()
@@ -392,7 +393,7 @@ test.describe("Side Panel activation", () => {
       { id: "chapter-1", url: "https://example.com/ch1", title: "Chapter 1" },
     ]
 
-    await seedTabContext(
+    const supportedTabId = await seedTabContext(
       supportedPage,
       context,
       {
@@ -405,32 +406,46 @@ test.describe("Side Panel activation", () => {
       MANGADEX_TEST_SERIES_URL
     )
 
-    await supportedPage.bringToFront()
-
-    // Open side panel for supported tab
-    const sp = await openSidepanelHarness(context, extensionId, supportedPage)
-    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
-    await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
-      timeout: 10000,
-    })
-    await expect(
-      sp.getByRole("tab", { name: "Manga", exact: true })
-    ).toBeVisible()
-
-    await unsupportedPage.bringToFront()
-
-    // Open side panel for unsupported tab (simulating tab switch)
-    const spUnsupported = await openSidepanelHarness(
+    const actualPanel = await openSidepanelViaChromeApi(
       context,
       extensionId,
-      unsupportedPage
+      supportedTabId
     )
-    await expect(spUnsupported.getByRole("tab", { name: "Manga" })).toHaveCount(
-      0
-    )
+    expect(actualPanel.supported).toBe(true)
+    expect(actualPanel.error).toBeNull()
+    await supportedPage.bringToFront()
+
+    const worker = await resolveBackgroundWorker(context)
+    const panelContexts = () =>
+      worker.evaluate(() =>
+        chrome.runtime.getContexts({ contextTypes: ["SIDE_PANEL"] })
+      )
+    await expect.poll(async () => (await panelContexts()).length).toBe(1)
+    const [panel] = await panelContexts()
+    expect(panel.documentId).toBeDefined()
+
+    const sp = await openSidepanelHarness(context, extensionId, supportedPage)
+    const mangaTab = sp.getByRole("tab", { name: "Manga", exact: true })
+    const queueTab = sp.getByRole("tab", { name: "Queue", selected: true })
+    await mangaTab.click()
+    await expect(sp.getByText("Hunter x Hunter")).toBeVisible()
+
+    await unsupportedPage.bringToFront()
+    await expect(queueTab).toBeVisible()
+    await expect(mangaTab).toHaveCount(0)
+    expect(await panelContexts()).toEqual([panel])
+
+    await supportedPage.bringToFront()
+    await mangaTab.click()
+    await expect(sp.getByText("Hunter x Hunter")).toBeVisible()
+    await supportedPage.goto(buildExampleUrl("/unsupported"), {
+      waitUntil: "domcontentloaded",
+    })
+    await expect(queueTab).toBeVisible()
+    await expect(mangaTab).toHaveCount(0)
+    expect(await panelContexts()).toEqual([panel])
 
     await sp.close()
-    await spUnsupported.close()
     await supportedPage.close()
     await unsupportedPage.close()
   })

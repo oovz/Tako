@@ -5,7 +5,6 @@ import type { TabContextStateService } from "@/entrypoints/background/tab-contex
 
 interface NavigationListenerTabUiCoordinator {
   updateActionForTab: (tabId: number, url?: string | null) => Promise<void>
-  updateSidePanelForTab: (tabId: number) => Promise<void>
 }
 
 interface NavigationListenerTabContextResolver {
@@ -185,7 +184,6 @@ class BackgroundNavigationListeners {
       return
     const url = changeInfo.url ?? tab.url ?? null
     void this.deps.tabUiCoordinator.updateActionForTab(tabId, url)
-    void this.deps.tabUiCoordinator.updateSidePanelForTab(tabId)
 
     if (tab.active && changeInfo.status === "loading") {
       await this.deps.tabContextCache.projectLoadingForTab(tabId, tab.windowId)
@@ -313,7 +311,6 @@ class BackgroundNavigationListeners {
       details.tabId,
       resolvedUrl
     )
-    void this.deps.tabUiCoordinator.updateSidePanelForTab(details.tabId)
 
     const isUrlSupported = !!matchUrl(resolvedUrl)
     if (!isUrlSupported) {
@@ -360,7 +357,6 @@ class BackgroundNavigationListeners {
     }
 
     void this.deps.tabUiCoordinator.updateActionForTab(details.tabId, url)
-    void this.deps.tabUiCoordinator.updateSidePanelForTab(details.tabId)
 
     await this.clearHistoryContext(details.tabId, url)
   }
@@ -418,19 +414,15 @@ class BackgroundNavigationListeners {
         )
       )
       const tabPromise = chrome.tabs.get(activeInfo.tabId)
-      // Action and Side Panel availability are URL-based, so do not make
-      // them wait for a page probe or provider request. This is especially
-      // important when activation wakes a cold MV3 service worker.
+      // Update the URL-based action indicator before any page probe or
+      // provider request completes, including on a cold worker start.
       void tabPromise
         .then(async (tab) => {
           await integrationMetadata
-          return Promise.all([
-            this.deps.tabUiCoordinator.updateActionForTab(
-              activeInfo.tabId,
-              tab.url || null
-            ),
-            this.deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId),
-          ])
+          await this.deps.tabUiCoordinator.updateActionForTab(
+            activeInfo.tabId,
+            tab.url || null
+          )
         })
         .catch((error) =>
           logger.debug("Unable to synchronize tab UI during activation", error)
@@ -477,7 +469,6 @@ class BackgroundNavigationListeners {
         activeInfo.tabId,
         null
       )
-      await this.deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
     }
   }
 
@@ -489,7 +480,6 @@ class BackgroundNavigationListeners {
           tab.id,
           tab.url || null
         )
-        void this.deps.tabUiCoordinator.updateSidePanelForTab(tab.id)
         if (tab.active) {
           void this.deps.tabContextResolver
             .resolveTabContext(tab.id, {
@@ -530,7 +520,6 @@ export async function reconcileIntegrationSupportAfterPermissionRemoval(deps: {
       const url = tab.url ?? tab.pendingUrl ?? ""
       const refreshes: Promise<unknown>[] = [
         deps.tabUiCoordinator.updateActionForTab(tab.id, url),
-        deps.tabUiCoordinator.updateSidePanelForTab(tab.id),
       ]
       if (tab.active) {
         refreshes.push(

@@ -61,7 +61,6 @@ function dependencies() {
     tabContextResolver: { resolveTabContext: resolve },
     tabUiCoordinator: {
       updateActionForTab: action,
-      updateSidePanelForTab: vi.fn(async () => undefined),
     },
   } satisfies Parameters<typeof registerBackgroundNavigationListeners>[0]
   return { deps, clear, resolve, action, cached }
@@ -183,7 +182,6 @@ describe("permission removal support refresh", () => {
       windowId: 2,
       allowCached: false,
     })
-    expect(deps.tabUiCoordinator.updateSidePanelForTab).toHaveBeenCalledTimes(2)
   })
   it("propagates readiness failure before reading tabs", async () => {
     const { deps, action } = dependencies()

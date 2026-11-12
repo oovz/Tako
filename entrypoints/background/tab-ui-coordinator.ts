@@ -60,17 +60,5 @@ export function createTabUiCoordinator() {
         logger.debug("updateActionForTab noop/error", error)
       }
     },
-
-    async updateSidePanelForTab(tabId: number): Promise<void> {
-      try {
-        await chrome.sidePanel.setOptions({
-          tabId,
-          path: "sidepanel.html",
-          enabled: true,
-        })
-      } catch (error) {
-        logger.debug("Failed to set side panel options (non-fatal):", error)
-      }
-    },
   }
 }

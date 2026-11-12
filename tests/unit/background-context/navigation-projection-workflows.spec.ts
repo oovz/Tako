@@ -164,7 +164,6 @@ function navigationHarness(retainedSession: Record<string, unknown> = {}) {
         icons.set(details.tabId!, structuredClone(details.path))
       },
     },
-    sidePanel: { setOptions: async () => undefined },
   })
   const cache = createTabContextCache()
   const state = new TabContextStateService(cache)
