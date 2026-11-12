@@ -1723,9 +1723,13 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
+  html:not([data-tako-motion="reduce"]) #panel-view-queue:not([hidden]) {
+    animation: panel-queue-appear 165ms var(--settle);
+  }
+
   html:not([data-tako-motion="reduce"])
     .panel-page:not([hidden])
-    :is(.queue-region, .manga-scroll, .recent-list) {
+    :is(.manga-scroll, .recent-list) {
     animation: panel-appear 135ms var(--settle);
   }
 
@@ -1845,6 +1849,16 @@
   }
   to {
     opacity: 1;
+  }
+}
+@keyframes panel-queue-appear {
+  from {
+    opacity: 0.72;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
   }
 }
 @keyframes count-in {

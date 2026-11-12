@@ -427,22 +427,33 @@ test.describe("Side Panel activation", () => {
     const sp = await openSidepanelHarness(context, extensionId, supportedPage)
     const mangaTab = sp.getByRole("tab", { name: "Manga", exact: true })
     const queueTab = sp.getByRole("tab", { name: "Queue", selected: true })
+    const queuePanel = sp.locator("#panel-view-queue")
+    await sp.emulateMedia({ reducedMotion: "no-preference" })
     await mangaTab.click()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible()
+    await queuePanel.evaluate((node) => {
+      node.addEventListener("animationstart", (event) => {
+        if (event.target === node)
+          node.setAttribute("data-entrance-observed", "")
+      })
+    })
 
     await unsupportedPage.bringToFront()
     await expect(queueTab).toBeVisible()
     await expect(mangaTab).toHaveCount(0)
+    await expect(queuePanel).toHaveAttribute("data-entrance-observed", "")
     expect(await panelContexts()).toEqual([panel])
 
     await supportedPage.bringToFront()
     await mangaTab.click()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible()
+    await sp.emulateMedia({ reducedMotion: "reduce" })
     await supportedPage.goto(buildExampleUrl("/unsupported"), {
       waitUntil: "domcontentloaded",
     })
     await expect(queueTab).toBeVisible()
     await expect(mangaTab).toHaveCount(0)
+    await expect(queuePanel).toHaveCSS("animation-name", "none")
     expect(await panelContexts()).toEqual([panel])
 
     await sp.close()

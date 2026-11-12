@@ -61,7 +61,13 @@ function PanelContent() {
   }
   const wasManga = useRef(false)
   useLayoutEffect(() => {
-    if (wasManga.current && !hasManga) queueTab.current?.focus()
+    if (
+      wasManga.current &&
+      !hasManga &&
+      document.activeElement === document.body
+    ) {
+      queueTab.current?.focus({ preventScroll: true })
+    }
     wasManga.current = view === "manga"
   }, [hasManga, view])
   const tabs: PanelView[] = hasManga

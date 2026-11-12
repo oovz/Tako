@@ -216,45 +216,57 @@ describe("real side panel composition", () => {
     expect(container.textContent).not.toContain("Search")
   })
 
-  it("keeps Queue selected when Manga appears and returns focus when Manga disappears", async () => {
-    stored.activeTabContextByWindow = {
-      1: {
-        windowId: 1,
-        activeTabId: 11,
-        revision: 5,
-        timestamp: 1,
-        context: null,
-      },
-    }
-    await mount()
-    expect(tab("manga")).toBeNull()
-    stored.activeTabContextByWindow = projection(4)
-    await act(async () =>
-      listeners.forEach((listener) =>
-        listener({ activeTabContextByWindow: {} }, "session")
+  it.each(["Manga", "Settings"])(
+    "returns to Queue when Manga disappears with focus on %s",
+    async (focusedControl) => {
+      stored.activeTabContextByWindow = {
+        1: {
+          windowId: 1,
+          activeTabId: 11,
+          revision: 5,
+          timestamp: 1,
+          context: null,
+        },
+      }
+      await mount()
+      expect(tab("manga")).toBeNull()
+      stored.activeTabContextByWindow = projection(4)
+      await act(async () =>
+        listeners.forEach((listener) =>
+          listener({ activeTabContextByWindow: {} }, "session")
+        )
       )
-    )
-    expect(tab("manga")).not.toBeNull()
-    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
-    act(() => tab("manga").click())
-    stored.activeTabContextByWindow = {
-      1: {
-        windowId: 1,
-        activeTabId: 11,
-        revision: 5,
-        timestamp: 1,
-        context: null,
-      },
-    }
-    await act(async () =>
-      listeners.forEach((listener) =>
-        listener({ activeTabContextByWindow: {} }, "session")
+      expect(tab("manga")).not.toBeNull()
+      expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+      const settings = container.querySelector<HTMLButtonElement>(
+        ".panel-status button"
+      )!
+      const focused = focusedControl === "Manga" ? tab("manga") : settings
+      act(() => {
+        tab("manga").click()
+        focused.focus()
+      })
+      stored.activeTabContextByWindow = {
+        1: {
+          windowId: 1,
+          activeTabId: 11,
+          revision: 5,
+          timestamp: 1,
+          context: null,
+        },
+      }
+      await act(async () =>
+        listeners.forEach((listener) =>
+          listener({ activeTabContextByWindow: {} }, "session")
+        )
       )
-    )
-    expect(tab("manga")).toBeNull()
-    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
-    expect(document.activeElement).toBe(tab("queue"))
-  })
+      expect(tab("manga")).toBeNull()
+      expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+      expect(document.activeElement).toBe(
+        focusedControl === "Manga" ? tab("queue") : settings
+      )
+    }
+  )
 
   it("returns to Queue after an accepted enqueue and clears only the submitted selection", async () => {
     await mount()
