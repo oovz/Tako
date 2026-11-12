@@ -14,7 +14,7 @@ export default defineConfig({
 
   webExt: {
     startUrls: [
-      "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter",
+      "https://mangamillion.shueisha.co.jp/en/title/121",
     ],
     disabled: false,
   },
