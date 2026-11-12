@@ -1,6 +1,6 @@
 {
   "name": "tako-manga-downloader",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Manga downloads, right in your browser. Queue chapters from Chrome’s side panel and keep browsing while they download.",
   "type": "module",
   "engines": {
