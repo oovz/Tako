@@ -19,6 +19,7 @@ import { assertIntegrationEndpointRequestUrl } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseText } from "@/src/shared/html-response-decoder"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { ChapterReleaseDateSchema } from "@/src/runtime/series-data-schemas"
 
 function buildLockedComicNettaiChapterUrl(
   thumbnailUrl: string,
@@ -108,6 +109,8 @@ export function extractComicNettaiSeriesMetadataFromDocument(
     coverUrl: normalizeComicNettaiCoverUrl(coverUrl),
     language: "ja",
     readingDirection: "rtl",
+    publisher: "Kobunsha",
+    imprint: "COMIC熱帯",
   }
 }
 
@@ -165,6 +168,12 @@ function buildComicNettaiChapter(
     throw new Error("Comic Nettai chapter URL could not be reconstructed")
   const title = readComicNettaiChapterTitle(item, thumbnail, id)
   const chapterNumber = parseChapterNumber(title)
+  const date = item
+    .querySelector(".detail--product__item__sdate")
+    ?.textContent?.trim()
+  const releaseDate = ChapterReleaseDateSchema.safeParse(
+    date?.replaceAll(".", "-")
+  ).data
   return {
     id,
     url,
@@ -172,6 +181,7 @@ function buildComicNettaiChapter(
     locked: isClosed || !item.classList.contains("is-open"),
     chapterLabel: title,
     chapterNumber,
+    releaseDate,
     language: "ja",
     comicInfo: {
       Title: title,

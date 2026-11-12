@@ -22,6 +22,7 @@ const runtime = {
 }
 const controller = new AbortController()
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   rateLimitService.cleanupRateLimiters()
 })
@@ -116,6 +117,8 @@ describe("MANGA Plus website download transport", () => {
     expect(fetcher).toHaveBeenCalledTimes(callsBeforeImage)
   })
   it("resolves the public catalog, keeps middle chapters locked and decrypts ordered chapter content", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-25T12:00:00Z"))
     installFetch()
     const series =
       await backgroundSiteAdapter.background.series!.resolveSeriesData({
@@ -130,6 +133,7 @@ describe("MANGA Plus website download transport", () => {
     expect(series.seriesMetadata).toMatchObject({
       title: "Home at the Horizon",
       language: "en",
+      contentRating: "all ages",
     })
     const chapters = series.chapterList
     if (!Array.isArray(chapters))
@@ -138,6 +142,7 @@ describe("MANGA Plus website download transport", () => {
     expect(chapters[0]).toMatchObject({
       id: "1024395",
       title: "Chapter 1: Chance Meeting",
+      releaseDate: "2025-03-22",
       locked: false,
     })
     expect(chapters.filter((chapter) => chapter.locked)).toMatchObject([

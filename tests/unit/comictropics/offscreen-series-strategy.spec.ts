@@ -65,6 +65,8 @@ describe("Comic Nettai public offscreen series strategy", () => {
       title: "煙たい話",
       author: "林史也",
       language: "ko",
+      publisher: "Kobunsha",
+      imprint: "COMIC熱帯",
     })
     expect(result.metadataError).toBeUndefined()
     expect(result.chapterListError).toBeUndefined()
@@ -74,8 +76,16 @@ describe("Comic Nettai public offscreen series strategy", () => {
       : chapterList?.chapters
     expect(chapters).toHaveLength(51)
     expect(chapters?.filter((chapter) => !chapter.locked)).toHaveLength(6)
-    expect(chapters?.[0]).toMatchObject({ id: "1033", title: "第49話" })
-    expect(chapters?.at(-1)).toMatchObject({ id: "97", title: "第1話" })
+    expect(chapters?.[0]).toMatchObject({
+      id: "1033",
+      title: "第49話",
+      releaseDate: "2026-09-04",
+    })
+    expect(chapters?.at(-1)).toMatchObject({
+      id: "97",
+      title: "第1話",
+      releaseDate: "2022-06-10",
+    })
     expect(
       request.mock.calls.map(([input]) => new URL(input.url).search)
     ).toEqual(["?page=2", "?page=3"])

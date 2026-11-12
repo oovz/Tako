@@ -30,6 +30,12 @@ function parseNumericChapterNumber(
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+function readContentRating(name: string | undefined): string | undefined {
+  const rating = name?.trim().toLowerCase()
+  if (rating === "all ages" || rating === "teen") return rating
+  return undefined
+}
+
 function buildSeriesMetadata(
   titleDetail: MangaMillionTitleDetail,
   titleId: number,
@@ -54,6 +60,8 @@ function buildSeriesMetadata(
     description: titleDetail.serviceTitle?.description,
     language,
     readingDirection: "rtl",
+    publisher: "Shueisha",
+    contentRating: readContentRating(titleDetail.serviceTitle?.ratingName),
   }
 }
 
@@ -174,6 +182,9 @@ async function resolveMangaMillionSeriesData(
     seriesTitle: seriesMetadata.title,
     authorName: seriesMetadata.author,
   })
+  const total = chapterListData.totalChapters
+  if (total !== undefined && total > 0 && total <= 2_147_483_647)
+    seriesMetadata.chapterCount = total
 
   return {
     seriesId: String(titleId),

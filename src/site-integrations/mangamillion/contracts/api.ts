@@ -8,6 +8,7 @@ export const MangaMillionServiceTitleSchema = z.looseObject({
   coverUrl: z.string().optional(),
   serviceTitleName: z.string().optional(),
   authorName: z.string().optional(),
+  ratingName: z.string().optional(),
   description: z.string().optional(),
   disclaimerText: z.string().optional(),
 })

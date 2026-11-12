@@ -35,6 +35,7 @@ function chapter(
     start?: number
     end?: number
     type?: number
+    verticalOnly?: boolean
   } = {}
 ): Uint8Array {
   return new BinaryWriter()
@@ -50,6 +51,8 @@ function chapter(
     .uint32(options.start ?? 0)
     .tag(7, 0)
     .uint32(options.end ?? 0)
+    .tag(9, 0)
+    .bool(options.verticalOnly ?? false)
     .tag(16, 0)
     .uint32(options.type ?? 0)
     .finish()
@@ -140,6 +143,23 @@ describe("MANGA Plus catalog strategy boundaries", () => {
       response(payload)
     )
     await expect(resolvePlus()).rejects.toThrow(/different title|another title/)
+  })
+
+  it("keeps the title rating and chapter release date and layout from the catalog", async () => {
+    vi.spyOn(integrationHttpClient, "request").mockResolvedValue(
+      response(
+        plusTitle([
+          chapter(1, { start: 1742655600, verticalOnly: true }),
+          chapter(2),
+        ])
+      )
+    )
+    const result = await resolvePlus()
+    expect(result.seriesMetadata?.contentRating).toBe("all ages")
+    expect(result.chapterList).toMatchObject([
+      { id: "1", releaseDate: "2025-03-22", readingDirection: "vertical" },
+      { id: "2", releaseDate: undefined, readingDirection: undefined },
+    ])
   })
 })
 

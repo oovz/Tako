@@ -6,6 +6,7 @@ export type MangaPlusChapter = {
   type: number
   start: number
   end: number
+  verticalOnly?: boolean
   locked?: boolean
 }
 
@@ -20,6 +21,7 @@ export type MangaPlusTitle = {
 export type MangaPlusTitleDetail = {
   title?: MangaPlusTitle
   description: string
+  rating: number
   chapters: MangaPlusChapter[]
 }
 

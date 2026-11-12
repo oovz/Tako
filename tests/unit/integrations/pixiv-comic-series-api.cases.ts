@@ -64,6 +64,8 @@ export function registerPixivComicSeriesApiCases(): void {
               name: "煙たい話",
               author: "林史也",
               description: "★コミックス①〜⑥巻好評発売中★<br><br>恋じゃない。",
+              categories: [{ id: 14, name: "ヒューマンドラマ" }],
+              magazine: { id: 316, name: "COMIC熱帯" },
               image: {
                 main_big:
                   "https://img-comic.pximg.net/images/work_main/9012.jpg",
@@ -82,6 +84,8 @@ export function registerPixivComicSeriesApiCases(): void {
         author: "林史也",
         description: "★コミックス①〜⑥巻好評発売中★ 恋じゃない。",
         coverUrl: "https://img-comic.pximg.net/images/work_main/9012.jpg",
+        genres: ["ヒューマンドラマ"],
+        imprint: "COMIC熱帯",
       })
       const request = mockRateLimitedFetch.mock.calls[0]?.[0] as {
         init?: RequestInit
@@ -105,6 +109,7 @@ export function registerPixivComicSeriesApiCases(): void {
                   numbering_title: "第1話",
                   sub_title: "",
                   viewer_path: "/viewer/stories/136645",
+                  is_tateyomi: true,
                 },
               },
               {
@@ -133,6 +138,7 @@ export function registerPixivComicSeriesApiCases(): void {
         title: "第1話",
         locked: false,
         chapterNumber: 1,
+        readingDirection: "vertical",
       })
       expect(chapters[1]).toMatchObject({
         id: "200001",

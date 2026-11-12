@@ -42,6 +42,11 @@ function projectChapter(chapter: MangaPlusChapter, now: number): Chapter {
     title: chapter.subtitle.trim() || chapter.name,
     chapterLabel: label,
     chapterNumber: /^\d+(?:\.\d+)?$/.test(label) ? Number(label) : undefined,
+    releaseDate:
+      chapter.start > 0
+        ? new Date(chapter.start * 1000).toISOString().slice(0, 10)
+        : undefined,
+    readingDirection: chapter.verticalOnly ? "vertical" : undefined,
     locked: isChapterLocked(chapter, now),
     comicInfo: {},
   }
@@ -68,7 +73,7 @@ function buildChapterList(
 
 function buildSeriesMetadata(
   title: MangaPlusTitle,
-  description: string
+  detail: MangaPlusTitleDetail
 ): SeriesMetadata {
   const coverUrl = title.coverUrl
     ? assertIntegrationEndpointRequestUrl(
@@ -80,12 +85,13 @@ function buildSeriesMetadata(
   return {
     title: title.name,
     author: title.author,
-    description,
+    description: detail.description,
     coverUrl,
     language: ["en", "es", "fr", "id", "pt-BR", "ru", "th", "de", "it", "vi"][
       title.language
     ],
     publisher: "Shueisha",
+    contentRating: ["all ages", "teen"][detail.rating],
   }
 }
 
@@ -99,7 +105,7 @@ async function resolveMangaPlusSeriesData(
     input.signal
   )
   const title = resolvedTitle(detail, id)
-  const seriesMetadata = buildSeriesMetadata(title, detail.description)
+  const seriesMetadata = buildSeriesMetadata(title, detail)
   const chapterList = buildChapterList(
     detail.chapters,
     title.id,

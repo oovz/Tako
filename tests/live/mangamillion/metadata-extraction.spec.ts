@@ -3,7 +3,7 @@ import { LIVE_MANGAMILLION_REFERENCE_URL } from "../../e2e/fixtures/test-domains
 import { loadLiveTabState } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("MangaMillion metadata extraction (live)", () => {
-  test("extracts One Piece author and chapter metadata", async ({
+  test("extracts One Piece creator, publisher, rating, and catalog count", async ({
     context,
     extensionId,
   }) => {
@@ -22,9 +22,18 @@ test.describe("MangaMillion metadata extraction (live)", () => {
       expect(state.siteIntegrationId).toBe("mangamillion")
       expect(state.mangaId).toBe("1")
       expect(state.seriesTitle).toBe("One Piece")
+      await expect(page.getByText("TEEN", { exact: true })).toBeVisible()
+      const catalogCount = page.getByText(/^\d+ \/ \d+ Chapters$/)
+      await expect(catalogCount).toBeVisible()
+      const total = Number(
+        (await catalogCount.textContent())?.match(/\/ (\d+)/)?.[1]
+      )
       expect(state.metadata).toMatchObject({
         author: "Eiichiro Oda",
         language: "en",
+        publisher: "Shueisha",
+        chapterCount: total,
+        contentRating: "teen",
       })
 
       const firstChapter = (state.chapters ?? []).find(

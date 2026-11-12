@@ -145,6 +145,7 @@ function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
     locked,
     chapterLabel: numberingTitle || undefined,
     chapterNumber,
+    readingDirection: episode.is_tateyomi === true ? "vertical" : undefined,
     comicInfo: { Title: chapterTitle },
   }
 }
@@ -168,6 +169,15 @@ function resolvePixivCoverUrl(work: PixivOfficialWork): string | undefined {
   return candidate ? normalizePixivImageUrl(candidate) : undefined
 }
 
+function readPixivGenres(work: PixivOfficialWork): string[] | undefined {
+  if (!Array.isArray(work.categories)) return undefined
+  const names = work.categories.flatMap((category) =>
+    typeof category?.name === "string" ? [sanitizeLabel(category.name)] : []
+  )
+  const genres = [...new Set(names.filter(Boolean))]
+  return genres.length ? genres : undefined
+}
+
 export async function fetchPixivSeriesMetadata(
   seriesId: string,
   rateLimitService: RateLimitService,
@@ -180,6 +190,11 @@ export async function fetchPixivSeriesMetadata(
     title: sanitizeLabel(work.name || "") || `Pixiv Comic ${seriesId}`,
     author: sanitizeLabel(work.author || "") || undefined,
     description: sanitizePixivHtmlText(work.description),
+    genres: readPixivGenres(work),
+    imprint:
+      typeof work.magazine?.name === "string"
+        ? sanitizeLabel(work.magazine.name) || undefined
+        : undefined,
     coverUrl: resolvePixivCoverUrl(work),
     language: "ja",
     readingDirection: "rtl",

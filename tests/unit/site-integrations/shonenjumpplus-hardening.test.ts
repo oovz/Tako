@@ -159,7 +159,7 @@ describe("Shonen Jump+ reader validation", () => {
     ).rejects.toThrow("contains an untrusted page image URL")
   })
 
-  it("reads the stable series id from episode-json metadata", () => {
+  it("reads the stable series id and the creator and synopsis from the series header", () => {
     const dataValue = encodeAttributeJson({
       readableProduct: {
         series: { id: "4401", title: "Series title" },
@@ -168,11 +168,15 @@ describe("Shonen Jump+ reader validation", () => {
 
     expect(
       readEpisodeJsonSeriesMetadataFromHtml(
-        `<script id="episode-json" data-value="${dataValue}"></script>`
+        `<script id="episode-json" data-value="${dataValue}"></script>
+        <h2 class="series-header-author">遠藤達哉</h2>
+        <p class="series-header-description">スパイ&lt;黄昏&gt;は、<br>諜報任務にあたっていた。</p>`
       )
     ).toMatchObject({
       seriesId: "4401",
       seriesTitle: "Series title",
+      author: "遠藤達哉",
+      description: "スパイ<黄昏>は、 諜報任務にあたっていた。",
     })
   })
 

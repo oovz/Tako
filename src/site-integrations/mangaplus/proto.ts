@@ -68,6 +68,7 @@ function readChapterField(f: Field, value: MangaPlusChapter): boolean {
   else if (f.number === 4) value.subtitle = string(f)
   else if (f.number === 6) value.start = uint(f)
   else if (f.number === 7) value.end = uint(f)
+  else if (f.number === 9) value.verticalOnly = uint(f) !== 0
   else if (f.number === 16) value.type = uint(f)
   else return false
   return true
@@ -151,7 +152,10 @@ function readDetailField(
 ): boolean {
   if (f.number === 1) value.title = title(child(f), budget)
   else if (f.number === 3) value.description = string(f)
-  else if (f.number === 9 || f.number === 10)
+  else if (f.number === 16) {
+    if (f.wire !== WireType.Varint) fail()
+    value.rating = f.reader.int32()
+  } else if (f.number === 9 || f.number === 10)
     old.push(chapter(child(f), budget))
   else if (f.number === 28) legacyChapterGroup(child(f), budget, old)
   else if (f.number === 38) v2.push(chapter(child(f), budget))
@@ -161,7 +165,11 @@ function readDetailField(
   return true
 }
 function detail(data: Uint8Array, budget: Budget): MangaPlusTitleDetail {
-  const value: MangaPlusTitleDetail = { description: "", chapters: [] }
+  const value: MangaPlusTitleDetail = {
+    description: "",
+    rating: 0,
+    chapters: [],
+  }
   const old: MangaPlusChapter[] = []
   const v2: MangaPlusChapter[] = []
   fields(data, budget, (f) => readDetailField(f, budget, value, old, v2))

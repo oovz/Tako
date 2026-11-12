@@ -28,6 +28,8 @@ export const EpisodeJsonSeriesMetadataSchema = z.strictObject({
   seriesId: z.string().optional(),
   seriesTitle: z.string().optional(),
   seriesThumbnailUri: z.string().optional(),
+  author: z.string().optional(),
+  description: z.string().optional(),
 })
 
 export type EpisodeJsonPayload = z.infer<typeof EpisodeJsonPayloadSchema>

@@ -446,6 +446,7 @@ describe("MangaMillion site integration", () => {
       const serviceTitleBytes = [
         ...encodeString(2, "One Piece"),
         ...encodeString(3, "Eiichiro Oda"),
+        ...encodeMessage(5, [...encodeInt32(1, 1), ...encodeString(2, "TEEN")]),
       ]
       const titleDetailBytes = [...encodeMessage(1, serviceTitleBytes)]
       const titleDetailBuf = new Uint8Array([
@@ -462,7 +463,11 @@ describe("MangaMillion site integration", () => {
         ...encodeInt32(1, 0),
         ...encodeMessage(2, chInfoBytes),
       ]
-      const chapterListBytes = [...encodeMessage(2, groupBytes)]
+      const chapterListBytes = [
+        ...encodeInt32(1, 112),
+        ...encodeMessage(2, groupBytes),
+        ...encodeInt32(7, 108),
+      ]
       const chapterListBuf = new Uint8Array([
         ...encodeInt32(1, 0),
         ...encodeMessage(60, chapterListBytes),
@@ -504,6 +509,9 @@ describe("MangaMillion site integration", () => {
       expect(result.seriesMetadata?.title).toBe("One Piece")
       expect(result.seriesMetadata?.author).toBe("Eiichiro Oda")
       expect(result.seriesMetadata?.language).toBe("en")
+      expect(result.seriesMetadata?.publisher).toBe("Shueisha")
+      expect(result.seriesMetadata?.chapterCount).toBe(112)
+      expect(result.seriesMetadata?.contentRating).toBe("teen")
 
       const chapters = result.chapterList as Chapter[]
       expect(chapters).toHaveLength(1)

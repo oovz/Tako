@@ -62,9 +62,13 @@ async function resolveShonenJumpPlusSeriesData(input: {
   const json = readEpisodeJsonSeriesMetadataFromHtml(html, input.seriesUrl)
   const seriesMetadata: SeriesMetadata = {
     title: json.seriesTitle ?? `Shonen Jump+ ${episodeId}`,
+    author: json.author,
+    description: json.description,
     coverUrl: json.seriesThumbnailUri,
     language: input.language ?? "ja",
     readingDirection: "rtl",
+    publisher: "Shueisha",
+    imprint: "少年ジャンプ＋",
   }
 
   let chapterList: Awaited<ReturnType<typeof fetchShonenJumpPlusChapterList>>

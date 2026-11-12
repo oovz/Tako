@@ -34,12 +34,14 @@ export function registerShonenJumpPlusChapterListCases(): void {
                 readable_product_id: "300",
                 viewer_uri: "/episode/300",
                 title: "3話",
+                display_open_at: "2019-02-30T15:00:00Z",
                 status: { label: "is_rentable", rental_price: 40 },
               },
               {
                 readable_product_id: "200",
                 viewer_uri: "/episode/200",
                 title: "2話",
+                display_open_at: "2019-04-07T15:00:00Z",
                 status: { label: "is_free", rental_price: null },
               },
             ],
@@ -110,6 +112,11 @@ export function registerShonenJumpPlusChapterListCases(): void {
         true,
         false,
         true,
+      ])
+      expect(chapters.map((chapter) => chapter.releaseDate)).toEqual([
+        undefined,
+        "2019-04-08",
+        undefined,
       ])
       expect(
         chapters.every(

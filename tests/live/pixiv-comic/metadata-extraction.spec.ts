@@ -10,7 +10,7 @@ import {
 } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Pixiv Comic metadata extraction (live)", () => {
-  test("extracts chapter numbers without adding volume numbers", async ({
+  test("preserves the work category, magazine, and episode numbers", async ({
     context,
     extensionId,
   }) => {
@@ -27,6 +27,16 @@ test.describe("Pixiv Comic metadata extraction (live)", () => {
     )
     expect(state.siteIntegrationId).toBe("pixiv-comic")
     expect(Array.isArray(state.chapters)).toBe(true)
+    await expect(
+      page.getByRole("link", { name: "ヒューマンドラマ", exact: true })
+    ).toBeVisible()
+    await expect(
+      page.getByText("この掲載誌(COMIC熱帯)の作品", { exact: true })
+    ).toBeVisible()
+    expect(state.metadata).toMatchObject({
+      genres: ["ヒューマンドラマ"],
+      imprint: "COMIC熱帯",
+    })
 
     assertNumericChapterProjection(state.chapters ?? [], {
       minNumberedChapters: 3,

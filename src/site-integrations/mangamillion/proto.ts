@@ -109,6 +109,24 @@ function decodeDeviceTokenRegister(
   return result
 }
 
+function decodeRatingName(
+  data: Uint8Array,
+  budget: DecodeBudget
+): string | undefined {
+  const reader = startMessage(data, budget)
+  let name: string | undefined
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    if (field === 2) {
+      requireWireType(wire, WireType.LengthDelimited)
+      name = utf8.decode(readDelimited(reader, data))
+    } else {
+      skipUnknown(reader, data, wire, field)
+    }
+  }
+  return name
+}
+
 function decodeServiceTitle(
   data: Uint8Array,
   budget: DecodeBudget
@@ -129,6 +147,13 @@ function decodeServiceTitle(
       case 3:
         requireWireType(wire, WireType.LengthDelimited)
         result.authorName = utf8.decode(readDelimited(reader, data))
+        break
+      case 5:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.ratingName = decodeRatingName(
+          readDelimited(reader, data),
+          budget
+        )
         break
       case 7:
         requireWireType(wire, WireType.LengthDelimited)

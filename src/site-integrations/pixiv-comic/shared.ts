@@ -81,6 +81,8 @@ export type PixivWorkV5Response = {
       name?: string
       author?: string
       description?: string
+      categories?: Array<{ name?: string }>
+      magazine?: { name?: string }
       image?: {
         main?: string
         main_big?: string
@@ -103,6 +105,7 @@ export type PixivEpisodesV2Response = {
         numbering_title?: string
         sub_title?: string
         read_start_at?: number
+        is_tateyomi?: boolean
         viewer_path?: string
         sales_type?: string
         state?: string

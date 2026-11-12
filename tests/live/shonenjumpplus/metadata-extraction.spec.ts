@@ -6,7 +6,7 @@ import {
 } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Shonen Jump+ metadata extraction (live)", () => {
-  test("extracts chapter numbers without adding volume numbers", async ({
+  test("keeps the displayed creator, synopsis, and episode date", async ({
     context,
     extensionId,
   }) => {
@@ -23,6 +23,29 @@ test.describe("Shonen Jump+ metadata extraction (live)", () => {
     )
     expect(state.siteIntegrationId).toBe("shonenjumpplus")
     expect(Array.isArray(state.chapters)).toBe(true)
+    expect(state.metadata).toMatchObject({
+      author: (
+        await page.locator(".series-header-author").textContent()
+      )?.trim(),
+      description: (
+        await page.locator(".series-header-description").textContent()
+      )
+        ?.replace(/\s+/g, " ")
+        .trim(),
+      publisher: "Shueisha",
+      imprint: "少年ジャンプ＋",
+    })
+    const episodeId = new URL(page.url()).pathname.split("/").at(-1)
+    const date = await page.locator(".episode-header-date").textContent()
+    expect(date?.trim()).toMatch(/^\d{4}年\d{2}月\d{2}日$/)
+    expect(
+      state.chapters?.find((chapter) => chapter.id === episodeId)
+    ).toMatchObject({
+      releaseDate: date
+        ?.trim()
+        .replace(/[年月]/g, "-")
+        .replace(/日$/, ""),
+    })
 
     assertNumericChapterProjection(state.chapters ?? [], {
       minNumberedChapters: 3,

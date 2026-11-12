@@ -11,6 +11,8 @@ import { parseTrustedShonenJumpPlusEpisodeUrl } from "./urls"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { ChapterReleaseDateSchema } from "@/src/runtime/series-data-schemas"
+import { z } from "zod"
 
 export type PaginationInfo = {
   per_page?: number
@@ -25,6 +27,7 @@ export type PaginationProduct = {
   readable_product_id?: string
   viewer_uri?: string
   title?: string
+  display_open_at?: string
   status?: ProductStatus
 }
 
@@ -33,9 +36,19 @@ const PUBLIC_FETCH_INIT: RequestInit = { credentials: "omit" }
 const MAX_SERIES_CHAPTERS = 5_000
 const MAX_PAGINATION_REQUESTS = 100
 const MAX_PAGE_SIZE = 100
+const JAPAN_UTC_OFFSET_MS = 9 * 60 * 60 * 1000
+const ReleaseTimestampSchema = z.iso.datetime()
 
 function isExplicitlyFree(status: ProductStatus | undefined): boolean {
   return status?.label === "is_free"
+}
+
+function releaseDateInJapan(timestamp: unknown): string | undefined {
+  const parsed = ReleaseTimestampSchema.safeParse(timestamp)
+  if (!parsed.success) return undefined
+  const japanTime = Date.parse(parsed.data) + JAPAN_UTC_OFFSET_MS
+  const date = new Date(japanTime).toISOString().split("T")[0]
+  return ChapterReleaseDateSchema.safeParse(date).data
 }
 
 export function mapEpisode(product: PaginationProduct): Chapter | null {
@@ -63,6 +76,7 @@ export function mapEpisode(product: PaginationProduct): Chapter | null {
     locked: !isExplicitlyFree(product.status),
     chapterLabel: title,
     chapterNumber: parseChapterNumber(title),
+    releaseDate: releaseDateInJapan(product.display_open_at),
     comicInfo: {
       Title: title,
       LanguageISO: "ja",

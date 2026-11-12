@@ -9,18 +9,41 @@ import {
 } from "./contracts/episode-json"
 
 function decodeHtmlAttributeEntities(value: string): string {
+  const character = (entity: string, digits: string, radix: number) => {
+    const codePoint = Number.parseInt(digits, radix)
+    return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity
+  }
   return value
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
-      String.fromCodePoint(Number.parseInt(hex, 16))
+    .replace(/&#x([0-9a-f]+);/gi, (entity, hex: string) =>
+      character(entity, hex, 16)
     )
-    .replace(/&#(\d+);/g, (_, decimal: string) =>
-      String.fromCodePoint(Number.parseInt(decimal, 10))
+    .replace(/&#(\d+);/g, (entity, decimal: string) =>
+      character(entity, decimal, 10)
     )
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
+}
+
+function readSeriesHeaderText(
+  html: string,
+  element: "h2" | "p",
+  className: "series-header-author" | "series-header-description"
+): string | undefined {
+  const pattern = new RegExp(
+    `<${element}\\b[^>]*\\sclass\\s*=\\s*(["'])${className}\\1[^>]*>([\\s\\S]*?)</${element}\\s*>`,
+    "i"
+  )
+  const content = html.match(pattern)?.[2]
+  if (!content) return undefined
+  return (
+    sanitizeLabel(
+      decodeHtmlAttributeEntities(content.replace(/<[^>]+>/g, " "))
+    ) || undefined
+  )
 }
 
 function parsePayload(
@@ -92,7 +115,11 @@ export function readEpisodeJsonSeriesMetadataFromHtml(
   baseUrl = "https://shonenjumpplus.com/"
 ): EpisodeJsonSeriesMetadata {
   const attribute = readEpisodeJsonAttributeFromHtml(html)
-  return normalizeEpisodeJsonSeriesMetadata(parsePayload(attribute), baseUrl)
+  return {
+    ...normalizeEpisodeJsonSeriesMetadata(parsePayload(attribute), baseUrl),
+    author: readSeriesHeaderText(html, "h2", "series-header-author"),
+    description: readSeriesHeaderText(html, "p", "series-header-description"),
+  }
 }
 
 function mainPageImageUrl(page: { src?: string }): string {
