@@ -80,23 +80,41 @@ describe("CopyManga reader", () => {
     )
     expect(new Set(first.chapters.map((ch) => ch.id)).size).toBe(490)
     expect(first.volumes).toEqual([
-      { id: "copy:default:1", title: "默認 · 話", label: "默認 · 話" },
-      { id: "copy:default:2", title: "默認 · 卷", label: "默認 · 卷" },
-      { id: "copy:default:3", title: "默認 · 番外篇", label: "默認 · 番外篇" },
+      {
+        id: "copy:default:1",
+        title: "默認 · 話",
+        label: "默認 · 話",
+        isCategory: true,
+      },
+      {
+        id: "copy:default:2",
+        title: "默認 · 卷",
+        label: "默認 · 卷",
+        isCategory: true,
+      },
+      {
+        id: "copy:default:3",
+        title: "默認 · 番外篇",
+        label: "默認 · 番外篇",
+        isCategory: true,
+      },
       {
         id: "copy:other_group:1",
         title: "其他系列 · 話",
         label: "其他系列 · 話",
+        isCategory: true,
       },
       {
         id: "copy:other_group:2",
         title: "其他系列 · 卷",
         label: "其他系列 · 卷",
+        isCategory: true,
       },
       {
         id: "copy:other_group:3",
         title: "其他系列 · 番外篇",
         label: "其他系列 · 番外篇",
+        isCategory: true,
       },
     ])
     expect(

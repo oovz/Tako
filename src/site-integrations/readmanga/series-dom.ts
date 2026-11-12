@@ -318,6 +318,7 @@ function mapChapterGroupsToVolumes(groups: ChapterGroup[]): VolumeState[] {
     id: group.volumeId,
     title: group.title,
     label: group.title,
+    ...(group.volumeNumber === undefined ? { isCategory: true as const } : {}),
   }))
 }
 

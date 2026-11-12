@@ -4,6 +4,7 @@ import type { ChapterState, VolumeState } from "@/src/types/tab-state"
 type VolumeGroup = {
   volumeId?: string
   volumeNumber?: number
+  isCategory?: true
   title: string
   key: string
   firstGroupId?: string
@@ -77,6 +78,7 @@ function explicitGroup(
     firstGroupId: volume.id,
     volumeId: volume.id,
     volumeNumber: chapter.volumeNumber,
+    isCategory: volume.isCategory,
     title:
       volume.title ??
       volume.label ??
@@ -162,7 +164,12 @@ function materializeRuns(
       : {
           number: node.volumeNumber,
           title: node.title,
-          chapters: node.chapters,
+          chapters: node.isCategory
+            ? node.chapters.map((chapter, index) => ({
+                ...chapter,
+                index: index + 1,
+              }))
+            : node.chapters,
           collapsed: collapsed.get(node.groupId) ?? true,
           groupId: node.groupId,
         }

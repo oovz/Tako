@@ -90,6 +90,54 @@ describe("groupChapters (Side Panel)", () => {
     ])
   })
 
+  it("restarts row numbering in each category and preserves source chapter numbers", () => {
+    const volumes: VolumeState[] = [
+      { id: "chapters", isCategory: true },
+      { id: "extras", isCategory: true },
+      { id: "volume-2" },
+    ]
+    const chapters = [
+      makeChapter({ url: "prologue", title: "Prologue", index: 1 }),
+      makeChapter({
+        url: "chapter-7",
+        title: "Chapter 7",
+        index: 2,
+        volumeId: "chapters",
+        chapterNumber: 7,
+      }),
+      makeChapter({
+        url: "chapter-8",
+        title: "Chapter 8",
+        index: 3,
+        volumeId: "chapters",
+      }),
+      makeChapter({
+        url: "extra-1",
+        title: "Extra",
+        index: 4,
+        volumeId: "extras",
+      }),
+      makeChapter({
+        url: "volume-2-chapter-1",
+        title: "Volume 2 Chapter 1",
+        index: 5,
+        volumeId: "volume-2",
+        volumeNumber: 2,
+      }),
+    ]
+
+    const rows = groupChapters(chapters, volumes).flatMap((item) =>
+      "chapters" in item ? item.chapters : [item]
+    )
+    expect(rows).toMatchObject([
+      { id: "prologue", index: 1 },
+      { id: "chapter-7", index: 1, chapterNumber: 7 },
+      { id: "chapter-8", index: 2 },
+      { id: "extra-1", index: 1 },
+      { id: "volume-2-chapter-1", index: 5, volumeNumber: 2 },
+    ])
+  })
+
   it("preserves mixed standalone/volume order while grouping chapters into volumes", () => {
     const chapters: ChapterState[] = [
       makeChapter({

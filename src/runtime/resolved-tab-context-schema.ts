@@ -23,6 +23,7 @@ const ResolvedVolumeSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1).optional(),
   label: z.string().min(1).optional(),
+  isCategory: z.literal(true).optional(),
 })
 
 const ResolvedChaptersSchema = z

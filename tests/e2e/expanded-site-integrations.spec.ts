@@ -116,10 +116,22 @@ test.describe("site downloads through the chapter selector", () => {
               })
               const toggle = row.getByRole("button")
               await expect(toggle).toBeVisible()
-              if (state.chapters.some((item) => item.volumeId === volume.id)) {
-                if ((await toggle.getAttribute("aria-expanded")) === "true") {
+              const firstChapters = state.chapters
+                .filter((item) => item.volumeId === volume.id)
+                .slice(0, 2)
+              if (firstChapters.length > 0) {
+                if ((await toggle.getAttribute("aria-expanded")) === "false") {
                   await toggle.click()
                 }
+                for (const [index, entry] of firstChapters.entries()) {
+                  const chapterRow = panel.locator(".manga-chapter").filter({
+                    has: panel.locator(`[id="${entry.id}"]`),
+                  })
+                  await expect(
+                    chapterRow.locator(".chapter-number")
+                  ).toHaveText(String(index + 1))
+                }
+                await toggle.click()
                 await expect(toggle).toHaveAttribute("aria-expanded", "false")
               } else {
                 await expect(toggle).toBeDisabled()

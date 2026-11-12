@@ -10,7 +10,7 @@ import type { ChapterState } from "@/src/types/tab-state"
 export interface SidePanelChapter {
   id: string
   title: string
-  index: number // 1-based index from site integration extraction order
+  index: number // 1-based row number in the selector
   chapterLabel?: string
   chapterNumber?: number
   volumeId?: string

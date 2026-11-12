@@ -145,7 +145,12 @@ function readGroupVolumes(
   const volumes: VolumeState[] = []
   for (const type of types) {
     const label = `${groupName} · ${type.name}`
-    volumes.push({ id: `copy:${groupId}:${type.id}`, title: label, label })
+    volumes.push({
+      id: `copy:${groupId}:${type.id}`,
+      title: label,
+      label,
+      isCategory: true,
+    })
   }
   return volumes
 }

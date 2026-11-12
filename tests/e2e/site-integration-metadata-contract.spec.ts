@@ -175,9 +175,24 @@ test.describe("Site integration chapter metadata", () => {
     )
 
     expect(state.volumes).toEqual([
-      { id: "manhuagui-volume-1", title: "单行本", label: "单行本" },
-      { id: "manhuagui-volume-2", title: "单话", label: "单话" },
-      { id: "manhuagui-volume-3", title: "番外篇", label: "番外篇" },
+      {
+        id: "manhuagui-volume-1",
+        title: "单行本",
+        label: "单行本",
+        isCategory: true,
+      },
+      {
+        id: "manhuagui-volume-2",
+        title: "单话",
+        label: "单话",
+        isCategory: true,
+      },
+      {
+        id: "manhuagui-volume-3",
+        title: "番外篇",
+        label: "番外篇",
+        isCategory: true,
+      },
     ])
 
     expect(state.chapters).toHaveLength(235)

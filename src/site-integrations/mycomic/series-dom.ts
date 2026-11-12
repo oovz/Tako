@@ -132,7 +132,7 @@ function registerVolume(
     existing.title = title
     existing.label = title
   } else {
-    volumes.push({ id, title, label: title })
+    volumes.push({ id, title, label: title, isCategory: true })
   }
   return { id, categoryId: category?.id }
 }
@@ -177,6 +177,7 @@ function readChapterCatalog(
     id,
     title,
     label: title,
+    isCategory: true,
   }))
   const chapters: Chapter[] = []
   const seen = new Set<string>()

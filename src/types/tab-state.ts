@@ -24,6 +24,8 @@ export interface VolumeState {
   id: string
   title?: string
   label?: string
+  /** A site catalog section such as collected volumes or extras. */
+  isCategory?: true
 }
 
 export interface MangaPageState {

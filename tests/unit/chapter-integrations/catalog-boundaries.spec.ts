@@ -97,10 +97,20 @@ describe("MyComic catalog groups", () => {
     )
     expect(result.chapterList).toMatchObject({
       volumes: [
-        { id: "mycomic:chapters", title: "單話", label: "單話" },
-        { id: "mycomic:volumes", title: "單行本", label: "單行本" },
-        { id: "mycomic:extras", title: "番外篇" },
-        { id: "mycomic:特典", title: "特典", label: "特典" },
+        {
+          id: "mycomic:chapters",
+          title: "單話",
+          label: "單話",
+          isCategory: true,
+        },
+        {
+          id: "mycomic:volumes",
+          title: "單行本",
+          label: "單行本",
+          isCategory: true,
+        },
+        { id: "mycomic:extras", title: "番外篇", isCategory: true },
+        { id: "mycomic:特典", title: "特典", label: "特典", isCategory: true },
       ],
       chapters: [
         { id: "1", chapterNumber: 2, volumeNumber: undefined },

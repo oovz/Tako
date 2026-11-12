@@ -152,6 +152,7 @@ const SeriesVolumeSchema = z.strictObject({
   id: z.string(),
   title: z.string().optional(),
   label: z.string().optional(),
+  isCategory: z.literal(true).optional(),
 }) satisfies z.ZodType<VolumeState>
 
 export const SeriesChapterListSchema = z.union([

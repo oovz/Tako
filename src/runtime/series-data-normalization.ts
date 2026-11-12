@@ -98,6 +98,7 @@ function normalizeRawVolume(value: unknown): RawSeriesVolume | null {
     id,
     title: normalizedOptionalString(value.title),
     label: normalizedOptionalString(value.label),
+    ...(value.isCategory === true ? { isCategory: true } : {}),
   }
 }
 

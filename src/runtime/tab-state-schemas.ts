@@ -41,6 +41,7 @@ export const VolumeStateSchema = z.strictObject({
   id: NonEmptyStringSchema,
   title: NonEmptyStringSchema.optional(),
   label: NonEmptyStringSchema.optional(),
+  isCategory: z.literal(true).optional(),
 }) satisfies z.ZodType<VolumeState>
 
 const UniqueChapterStatesSchema = z
