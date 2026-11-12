@@ -12,6 +12,7 @@ import type { DownloadTaskState } from "@/src/domain/queue/state"
 import {
   buildSeriesComicInfoBase,
   composeChapterMetadata,
+  pickChapterArchiveMetadata,
 } from "@/src/shared/chapter-metadata"
 
 /**
@@ -56,6 +57,7 @@ export function resolveDownloadPlan(
       throw new Error("chapter title missing - cannot build file path")
     if (!ch.id) throw new Error("chapter id missing - cannot build file path")
     const input: ChapterInput = {
+      ...pickChapterArchiveMetadata(ch),
       id: ch.id,
       url: ch.url,
       title: ch.title,

@@ -11,6 +11,7 @@ import {
 import { RATE_POLICY_LIMITS } from "@/src/shared/rate-policy-limits"
 import { SETTINGS_LIMITS } from "@/src/domain/settings/schema"
 import {
+  ChapterArchiveMetadataShape,
   PublicHttpsUrlSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
@@ -113,6 +114,7 @@ const nativeOutputSettlementSchema = z
 
 const taskChapterSchema = z
   .object({
+    ...ChapterArchiveMetadataShape,
     requestedPath: nonemptyString.nullable(),
     id: nonemptyString,
     url: nonemptyString,

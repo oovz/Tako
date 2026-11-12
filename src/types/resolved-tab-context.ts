@@ -1,4 +1,5 @@
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
+import type { ChapterArchiveMetadata } from "@/src/types/chapter"
 import type { VolumeState } from "@/src/types/tab-state"
 
 export interface ResolvedTabReadyContext {
@@ -7,18 +8,20 @@ export interface ResolvedTabReadyContext {
   siteIntegrationId: string
   mangaId: string
   seriesTitle: string
-  chapters: Array<{
-    id: string
-    url: string
-    title: string
-    locked?: boolean
-    chapterLabel?: string
-    chapterNumber?: number
-    volumeId?: string
-    volumeNumber?: number
-    volumeLabel?: string
-    language?: string
-  }>
+  chapters: Array<
+    ChapterArchiveMetadata & {
+      id: string
+      url: string
+      title: string
+      locked?: boolean
+      chapterLabel?: string
+      chapterNumber?: number
+      volumeId?: string
+      volumeNumber?: number
+      volumeLabel?: string
+      language?: string
+    }
+  >
   volumes?: VolumeState[]
   metadata?: SeriesMetadataSnapshot
   chaptersLoading?: boolean

@@ -1,7 +1,10 @@
 import { z } from "zod"
 
 import { DownloadTaskChapterStatusSchema } from "@/src/shared/download-contract"
-import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
+import {
+  ChapterArchiveMetadataShape,
+  SeriesMetadataSnapshotSchema,
+} from "@/src/runtime/series-data-schemas"
 import type {
   ActiveTabContextByWindow,
   ChapterState,
@@ -15,6 +18,7 @@ const NonEmptyStringSchema = z.string().min(1)
 const NonNegativeIntegerSchema = z.number().int().nonnegative()
 
 export const ChapterStateSchema = z.strictObject({
+  ...ChapterArchiveMetadataShape,
   id: NonEmptyStringSchema,
   url: NonEmptyStringSchema,
   title: NonEmptyStringSchema,

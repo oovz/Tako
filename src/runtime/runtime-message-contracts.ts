@@ -18,6 +18,7 @@ import {
   OffscreenJobStateSchema,
 } from "@/src/runtime/offscreen-job-contracts"
 import {
+  ChapterArchiveMetadataShape,
   SeriesChapterListSchema,
   PublicHttpsUrlSchema,
   SeriesMetadataSchema,
@@ -200,6 +201,7 @@ const OffscreenDownloadChapterPayloadSchema = z
       metadata: SeriesMetadataSnapshotSchema.optional(),
     }),
     chapter: z.strictObject({
+      ...ChapterArchiveMetadataShape,
       id: z.string().min(1),
       title: z.string().min(1),
       url: z.string().url(),

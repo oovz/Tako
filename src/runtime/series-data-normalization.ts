@@ -1,5 +1,10 @@
 import { isRecord } from "@/src/shared/type-guards"
-import { SeriesMetadataSchema } from "@/src/runtime/series-data-schemas"
+import {
+  ChapterArchiveMetadataSchema,
+  SeriesMetadataSchema,
+} from "@/src/runtime/series-data-schemas"
+import { pickChapterArchiveMetadata } from "@/src/shared/chapter-metadata"
+import type { ChapterArchiveMetadata } from "@/src/types/chapter"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import type {
   ResolvedTabContext,
@@ -8,7 +13,7 @@ import type {
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 import type { VolumeState } from "@/src/types/tab-state"
 
-export interface RawSeriesChapter {
+export interface RawSeriesChapter extends ChapterArchiveMetadata {
   id?: string
   url: string
   title: string
@@ -70,6 +75,7 @@ function normalizeRawChapter(value: unknown): RawSeriesChapter | null {
   if (!url || !title) return null
 
   return {
+    ...ChapterArchiveMetadataSchema.safeParse(value).data,
     id: normalizedOptionalString(value.id),
     url,
     title,
@@ -185,6 +191,7 @@ function buildReadySeriesContext(
     mangaId,
     seriesTitle,
     chapters: chapters.map((chapter, index) => ({
+      ...pickChapterArchiveMetadata(chapter),
       id: chapterIds[index],
       url: chapter.url,
       title: chapter.title,

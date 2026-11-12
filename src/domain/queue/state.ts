@@ -2,7 +2,7 @@ import type {
   DownloadErrorCategory,
   DownloadTaskStatus,
 } from "@/src/shared/download-contract"
-import type { ChapterStatus } from "@/src/types/chapter"
+import type { ChapterArchiveMetadata, ChapterStatus } from "@/src/types/chapter"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 
 export const QUEUE_AGGREGATE_KEYS = [
@@ -75,7 +75,7 @@ export interface NativeOutputSettlement {
   appliedAt: number
 }
 
-export interface TaskChapter {
+export interface TaskChapter extends ChapterArchiveMetadata {
   requestedPath: string | null
   id: string
   url: string

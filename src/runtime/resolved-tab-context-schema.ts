@@ -1,8 +1,12 @@
 import { z } from "zod"
 
-import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
+import {
+  ChapterArchiveMetadataShape,
+  SeriesMetadataSnapshotSchema,
+} from "@/src/runtime/series-data-schemas"
 
 const ResolvedChapterSchema = z.strictObject({
+  ...ChapterArchiveMetadataShape,
   id: z.string().min(1),
   url: z.string().min(1),
   title: z.string().min(1),

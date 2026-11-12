@@ -1,5 +1,9 @@
 import type { Book } from "@/src/types/book"
-import type { ChapterInput, Chapter } from "@/src/types/chapter"
+import type {
+  ChapterArchiveMetadata,
+  ChapterInput,
+  Chapter,
+} from "@/src/types/chapter"
 import type { ComicInfoV2 } from "@/src/types/comic-info"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 
@@ -10,14 +14,19 @@ type SeriesMetadataLike = Pick<
   | "description"
   | "genres"
   | "communityRating"
+  | "chapterCount"
   | "year"
   | "language"
   | "contentRating"
   | "readingDirection"
   | "publisher"
+  | "imprint"
 >
 
 const AGE_RATINGS = new Map<string, ComicInfoV2["AgeRating"]>([
+  ["all ages", "Everyone"],
+  ["adult", "Adults Only 18+"],
+  ["teen", "Teen"],
   ["safe", "Everyone"],
   ["suggestive", "Teen"],
   ["erotica", "Mature 17+"],
@@ -31,12 +40,26 @@ const READING_DIRECTIONS = new Map<string, ComicInfoV2["Manga"]>([
   ["ltr", "Yes"],
   ["left-to-right", "Yes"],
   ["left_to_right", "Yes"],
+  ["vertical", "Yes"],
 ])
 
-function mapReadingDirectionToManga(
+export function mapReadingDirectionToManga(
   readingDirection: string | undefined
 ): ComicInfoV2["Manga"] | undefined {
   return READING_DIRECTIONS.get(readingDirection?.trim().toLowerCase() ?? "")
+}
+
+export function pickChapterArchiveMetadata(
+  chapter: ChapterArchiveMetadata
+): ChapterArchiveMetadata {
+  const { releaseDate, scanInformation, blackAndWhite, readingDirection } =
+    chapter
+  return {
+    ...(releaseDate !== undefined ? { releaseDate } : {}),
+    ...(scanInformation !== undefined ? { scanInformation } : {}),
+    ...(blackAndWhite !== undefined ? { blackAndWhite } : {}),
+    ...(readingDirection !== undefined ? { readingDirection } : {}),
+  }
 }
 
 export function buildSeriesComicInfoBase(
@@ -46,6 +69,7 @@ export function buildSeriesComicInfoBase(
   const source: Partial<SeriesMetadataLike> = metadata ?? {}
   const base: ComicInfoV2 = {
     Series: seriesTitle,
+    Count: source.chapterCount,
     Writer: source.author,
     Penciller: source.artist,
     Summary: source.description,
@@ -62,6 +86,7 @@ export function buildSeriesComicInfoBase(
     AgeRating: AGE_RATINGS.get(source.contentRating ?? ""),
     Manga: mapReadingDirectionToManga(source.readingDirection) ?? "Yes",
     Publisher: source.publisher,
+    Imprint: source.imprint,
     Format: "Web",
   }
 
@@ -91,6 +116,7 @@ export function composeChapterMetadata(
   }
 
   return {
+    ...pickChapterArchiveMetadata(input),
     id: input.id,
     url: input.url,
     title: input.title,

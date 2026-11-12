@@ -582,6 +582,7 @@ export async function expectSavedChapterArchive(
     const archive = readChapterArchiveWithComicInfo(bytes, chapter.totalImages!)
     comicInfo = await inspectComicInfo(optionsPage, archive.comicInfoXml)
     const metadata = task.settingsSnapshot.comicInfo
+    const dateParts = chapter.releaseDate?.split("-").map(Number)
     const expected = {
       Series: task.seriesTitle,
       Title: chapter.title,
@@ -591,9 +592,16 @@ export async function expectSavedChapterArchive(
       Penciller: metadata?.artist,
       Summary: metadata?.description,
       Genre: metadata?.genres?.length ? metadata.genres.join(", ") : undefined,
-      Year: metadata?.year,
+      Year: dateParts?.[0] ?? metadata?.year,
+      Month: dateParts?.[1],
+      Day: dateParts?.[2],
       LanguageISO: chapter.language ?? metadata?.language,
       Publisher: metadata?.publisher,
+      Imprint: metadata?.imprint,
+      Count: metadata?.chapterCount,
+      CommunityRating: metadata?.communityRating,
+      ScanInformation: chapter.scanInformation,
+      BlackAndWhite: chapter.blackAndWhite,
       Web: chapter.url,
       PageCount: chapter.totalImages,
     }

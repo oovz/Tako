@@ -1,4 +1,5 @@
 import type { Chapter } from "@/src/types/chapter"
+import { pickChapterArchiveMetadata } from "@/src/shared/chapter-metadata"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type {
   ProcessChapterStreamingOptions,
@@ -20,6 +21,7 @@ export function createChapterForProcessing(
   chapter: OffscreenDownloadChapterPayload["chapter"]
 ): Chapter {
   return {
+    ...pickChapterArchiveMetadata(chapter),
     id: chapter.id,
     url: chapter.url,
     title: chapter.title,

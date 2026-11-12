@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 import { assertSafePublicHttpsUrl } from "@/src/site-integrations/request-policy"
-import type { Chapter } from "@/src/types/chapter"
+import type { Chapter, ChapterArchiveMetadata } from "@/src/types/chapter"
 import type { ComicInfoV2, ComicPageInfo } from "@/src/types/comic-info"
 import type { SeriesChapterListResult } from "@/src/types/site-integrations"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
@@ -29,6 +29,7 @@ const SeriesMetadataSnapshotShape = {
   description: z.string().optional(),
   genres: z.array(z.string()).optional(),
   communityRating: z.number().finite().optional(),
+  chapterCount: z.number().int().nonnegative().max(2147483647).optional(),
   year: z.number().finite().optional(),
   coverUrl: PublicHttpsUrlSchema.optional(),
   alternativeTitles: z.array(z.string()).optional(),
@@ -37,6 +38,7 @@ const SeriesMetadataSnapshotShape = {
   contentRating: z.string().optional(),
   readingDirection: z.string().optional(),
   publisher: z.string().optional(),
+  imprint: z.string().optional(),
   tags: z.array(z.string()).optional(),
 } as const
 
@@ -117,7 +119,21 @@ const ComicInfoV2Schema = z.strictObject({
   Locations: z.string().optional(),
 }) satisfies z.ZodType<ComicInfoV2>
 
+export const ChapterReleaseDateSchema = z.iso.date()
+
+export const ChapterArchiveMetadataShape = {
+  releaseDate: ChapterReleaseDateSchema.optional(),
+  scanInformation: z.string().trim().min(1).optional(),
+  blackAndWhite: z.enum(["Yes", "No", "Unknown"]).optional(),
+  readingDirection: z.enum(["rtl", "ltr", "vertical"]).optional(),
+} satisfies z.ZodRawShape
+
+export const ChapterArchiveMetadataSchema = z.object(
+  ChapterArchiveMetadataShape
+) satisfies z.ZodType<ChapterArchiveMetadata>
+
 const SeriesChapterSchema = z.strictObject({
+  ...ChapterArchiveMetadataShape,
   id: z.string(),
   url: z.string(),
   title: z.string(),

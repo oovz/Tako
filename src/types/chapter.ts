@@ -6,11 +6,19 @@ import type { ComicInfoV2 } from "./comic-info"
  */
 export type ChapterStatus = DownloadTaskChapterStatus
 
+export interface ChapterArchiveMetadata {
+  /** Calendar date of this edition's release on the source, in YYYY-MM-DD. */
+  releaseDate?: string
+  scanInformation?: string
+  blackAndWhite?: ComicInfoV2["BlackAndWhite"]
+  readingDirection?: "rtl" | "ltr" | "vertical"
+}
+
 /**
  * Minimal input needed to compose a Chapter (pre-composition stage).
  * This matches raw chapter extraction + id coming from the site integration.
  */
-export interface ChapterInput {
+export interface ChapterInput extends ChapterArchiveMetadata {
   id: string // Site-integration-provided unique chapter id (required)
   url: string // Chapter URL
   title: string // Chapter title
@@ -27,7 +35,7 @@ export interface ChapterInput {
  * Final Chapter object used internally for download + offscreen work.
  * Holds resolved ComicInfo (minus PageCount until images known) and path.
  */
-export interface Chapter {
+export interface Chapter extends ChapterArchiveMetadata {
   id: string
   url: string
   title: string

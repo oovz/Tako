@@ -1,6 +1,9 @@
 import type { Chapter } from "@/src/types/chapter"
 import type { ComicInfoV2 } from "@/src/types/comic-info"
-import { buildSeriesComicInfoBase } from "@/src/shared/chapter-metadata"
+import {
+  buildSeriesComicInfoBase,
+  mapReadingDirectionToManga,
+} from "@/src/shared/chapter-metadata"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
@@ -32,8 +35,9 @@ export function buildComicInfoMetadata(input: {
 }): ComicInfoV2 {
   const { chapter, seriesTitle, seriesMetadata, pageCount, hasCoverImage } =
     input
+  const series = buildSeriesComicInfoBase(seriesTitle, seriesMetadata)
   const metadata: ComicInfoV2 = {
-    ...buildSeriesComicInfoBase(seriesTitle, seriesMetadata),
+    ...series,
     Title: chapter.title,
     Series: seriesTitle,
     Number: chapter.chapterLabel ?? chapter.chapterNumber?.toString(),
@@ -41,6 +45,16 @@ export function buildComicInfoMetadata(input: {
     LanguageISO: chapter.language ?? seriesMetadata?.language,
     Web: chapter.url,
     PageCount: pageCount,
+    ScanInformation: chapter.scanInformation,
+    BlackAndWhite: chapter.blackAndWhite,
+    Manga: mapReadingDirectionToManga(chapter.readingDirection) ?? series.Manga,
+  }
+
+  if (chapter.releaseDate) {
+    const [year, month, day] = chapter.releaseDate.split("-").map(Number)
+    metadata.Year = year
+    metadata.Month = month
+    metadata.Day = day
   }
 
   if (hasCoverImage && pageCount > 0) {

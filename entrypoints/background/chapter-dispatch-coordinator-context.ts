@@ -14,6 +14,7 @@ import type { SiteIntegrationSettingsService } from "@/src/storage/site-integrat
 import type { TaskDestination } from "@/src/types/state-snapshots"
 import type { Chapter } from "@/src/types/chapter"
 import type { DownloadPlan } from "./queue-helpers"
+import { pickChapterArchiveMetadata } from "@/src/shared/chapter-metadata"
 
 export type ChapterDispatchMessage =
   RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">
@@ -111,6 +112,7 @@ export function canSendChapterDispatch(
 function chapterDispatchPayload(context: ChapterDispatchContext) {
   const { chapter, latestTask, taskChapter } = context
   return {
+    ...pickChapterArchiveMetadata(chapter),
     id: chapter.id,
     title: chapter.title,
     url: chapter.url,

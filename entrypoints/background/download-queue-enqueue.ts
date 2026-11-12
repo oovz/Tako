@@ -3,6 +3,7 @@ import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { getDefinition } from "@/src/site-integrations/catalog"
 import type { SiteIntegrationDefinition } from "@/src/site-integrations/definition-types"
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
+import { pickChapterArchiveMetadata } from "@/src/shared/chapter-metadata"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 import type { SiteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
 import type { SiteOverridesService } from "@/src/storage/site-overrides-service"
@@ -69,6 +70,7 @@ export function buildStartDownloadTask(input: {
     throw new Error("Select a download folder before creating a task")
 
   const chapters = selectedChapters.map((chapter) => ({
+    ...pickChapterArchiveMetadata(chapter),
     id: chapter.id,
     url: chapter.url,
     title: sanitizeLabel(chapter.title),

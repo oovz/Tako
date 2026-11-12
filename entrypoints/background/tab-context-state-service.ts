@@ -4,6 +4,7 @@ import { isMangaPageState } from "@/src/runtime/tab-state-schemas"
 import { resolveVolumeStates } from "@/src/runtime/state-shapes"
 import { ResolvedTabContextSchema } from "@/src/runtime/resolved-tab-context-schema"
 import { matchUrl } from "@/src/site-integrations/url-matcher"
+import { pickChapterArchiveMetadata } from "@/src/shared/chapter-metadata"
 import type { MangaPageState, ProjectedTabContext } from "@/src/types/tab-state"
 import type {
   ResolvedTabContext,
@@ -173,6 +174,7 @@ export class TabContextStateService {
 function normalizeResolvedChapters(typedPayload: ResolvedTabReadyContext) {
   return typedPayload.chapters.map(
     (chapter: ResolvedTabChapter, index: number) => ({
+      ...pickChapterArchiveMetadata(chapter),
       id: chapter.id,
       url: chapter.url,
       title: chapter.title,

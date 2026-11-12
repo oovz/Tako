@@ -1,7 +1,7 @@
-import type { ChapterStatus } from "@/src/types/chapter"
+import type { ChapterArchiveMetadata, ChapterStatus } from "@/src/types/chapter"
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 
-export interface ChapterState {
+export interface ChapterState extends ChapterArchiveMetadata {
   id: string
   url: string
   title: string

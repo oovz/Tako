@@ -8,6 +8,7 @@ export interface SeriesMetadata {
   description?: string
   genres?: string[]
   communityRating?: number
+  chapterCount?: number
   year?: number
   coverUrl?: string
   alternativeTitles?: string[]
@@ -16,5 +17,6 @@ export interface SeriesMetadata {
   contentRating?: string
   readingDirection?: string
   publisher?: string
+  imprint?: string
   tags?: string[]
 }
