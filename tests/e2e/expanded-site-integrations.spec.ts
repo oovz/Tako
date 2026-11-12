@@ -146,16 +146,17 @@ test.describe("site downloads through the chapter selector", () => {
             name: /Chapters/i,
           })
           if (await allChapters.count()) await allChapters.click()
-          const selector = panel.locator("[data-virtualized]")
+          const scroller = panel.locator(".manga-scroll")
           const chapterIndex = state.chapters.findIndex(
             (item) => item.id === fixture.chapterId
           )
-          await selector.evaluate((element, index) => {
+          await scroller.evaluate((element, index) => {
             element.scrollTop = index * 40
           }, chapterIndex)
           const selection = panel.locator(
             `[role="checkbox"][id="${fixture.chapterId}"]`
           )
+          await expect(selection).toBeVisible()
           await selection.check()
           await panel.getByRole("button", { name: /Download \(1\)/i }).click()
           const queued = await waitForGlobalState(context, (candidate) =>

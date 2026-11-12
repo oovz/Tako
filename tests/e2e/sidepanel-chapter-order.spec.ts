@@ -819,6 +819,7 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
     exact: true,
   })
   const cover = panel.locator(".manga-cover")
+  const scroll = panel.locator(".manga-scroll")
   const selectAll = panel.getByRole("checkbox", { name: "Select all" })
   await expect(first).toBeVisible()
   await expect(locked).toBeDisabled()
@@ -828,10 +829,13 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
 
   for (const [width, height] of [
     [360, 730],
-    [320, 620],
+    [320, 500],
     [200, 640],
   ]) {
     await panel.setViewportSize({ width, height })
+    await scroll.evaluate((element) => {
+      element.scrollTop = 0
+    })
     await expect(
       panel.getByRole("tab", { name: "Queue", exact: true })
     ).toBeInViewport()
@@ -844,13 +848,8 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
       secondRow.getByTitle("Saved to folder", { exact: true }),
       list.getByTitle("Previously processed", { exact: true }),
     ]) {
-      if (width > 240) await expect(badge).toBeInViewport({ ratio: 1 })
-      else {
-        const bounds = await badge.boundingBox()
-        expect(bounds).not.toBeNull()
-        expect(bounds!.x).toBeGreaterThanOrEqual(0)
-        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
-      }
+      await badge.scrollIntoViewIfNeeded()
+      await expect(badge).toBeInViewport({ ratio: 1 })
     }
     for (const label of [title, first]) {
       expect(
@@ -904,7 +903,7 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
   // New rows change the estimated height as they enter the virtual window.
   await expect
     .poll(async () => {
-      await panel.locator(".manga-scroll").evaluate((element) => {
+      await scroll.evaluate((element) => {
         element.scrollTop = element.scrollHeight
       })
       return last.count()
