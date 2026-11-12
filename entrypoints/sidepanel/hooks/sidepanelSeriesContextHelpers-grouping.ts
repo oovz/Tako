@@ -73,19 +73,18 @@ function explicitGroup(
   if (chapter.volumeId === undefined) return
   const volume = volumes.get(chapter.volumeId)
   if (!volume) return
+  const volumeNumber = volume.isCategory ? undefined : chapter.volumeNumber
   return {
     key: volume.id,
     firstGroupId: volume.id,
     volumeId: volume.id,
-    volumeNumber: chapter.volumeNumber,
+    volumeNumber,
     isCategory: volume.isCategory,
     title:
       volume.title ??
       volume.label ??
       chapter.volumeLabel ??
-      (chapter.volumeNumber !== undefined
-        ? `Volume ${chapter.volumeNumber}`
-        : "Volume"),
+      (volumeNumber !== undefined ? `Volume ${volumeNumber}` : "Volume"),
   }
 }
 

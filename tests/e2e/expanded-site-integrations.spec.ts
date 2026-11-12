@@ -116,6 +116,9 @@ test.describe("site downloads through the chapter selector", () => {
               })
               const toggle = row.getByRole("button")
               await expect(toggle).toBeVisible()
+              await expect(row.locator(".volume-copy strong")).toHaveText(
+                volume.title!
+              )
               const firstChapters = state.chapters
                 .filter((item) => item.volumeId === volume.id)
                 .slice(0, 2)

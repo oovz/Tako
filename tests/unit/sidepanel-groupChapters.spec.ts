@@ -138,6 +138,35 @@ describe("groupChapters (Side Panel)", () => {
     ])
   })
 
+  it("uses the category heading when the first entry is a numbered volume", () => {
+    // Regression reported for https://mycomic.com/cn/comics/35634.
+    const grouped = groupChapters(
+      [
+        makeChapter({
+          url: "collected-volume-9",
+          title: "第09卷",
+          volumeId: "mycomic:volumes",
+          volumeNumber: 9,
+        }),
+        makeChapter({
+          url: "volume-10-chapter-1",
+          title: "Chapter 1",
+          volumeId: "volume-10",
+          volumeNumber: 10,
+        }),
+      ],
+      [
+        { id: "mycomic:volumes", title: "单行本", isCategory: true },
+        { id: "volume-10", title: "Volume 10" },
+      ]
+    )
+
+    expect(grouped).toMatchObject([
+      { title: "单行本", number: undefined, chapters: [{ volumeNumber: 9 }] },
+      { title: "Volume 10", number: 10 },
+    ])
+  })
+
   it("preserves mixed standalone/volume order while grouping chapters into volumes", () => {
     const chapters: ChapterState[] = [
       makeChapter({
