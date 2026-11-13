@@ -5,22 +5,20 @@ import {
 } from "@/src/site-integrations/catalog"
 import type {
   SiteIntegrationEnablementMap,
-  SiteIntegrationSettingsMap,
   SiteOverrideRecord,
 } from "@/src/domain/site-integrations/storage-schemas"
+import { hasSiteOverrides } from "../components/SiteIntegrationCard-model"
 
 export type IntegrationFilter = "all" | "enabled" | "disabled" | "overrides"
 
 export function getOverriddenIntegrationIds(
-  overrides: Record<string, SiteOverrideRecord>,
-  settings: SiteIntegrationSettingsMap
+  overrides: Record<string, SiteOverrideRecord>
 ) {
-  return new Set([
-    ...Object.keys(overrides),
-    ...Object.entries(settings)
-      .filter(([, values]) => Object.keys(values).length > 0)
-      .map(([id]) => id),
-  ])
+  return new Set(
+    Object.entries(overrides)
+      .filter(([, override]) => hasSiteOverrides(override))
+      .map(([id]) => id)
+  )
 }
 
 function matchesIntegrationFilter(

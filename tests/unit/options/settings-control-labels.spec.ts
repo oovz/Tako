@@ -48,7 +48,6 @@ describe("options control labels", () => {
             },
           ],
         },
-        enabled: true,
         effectiveValue: [],
         onChange: vi.fn(),
       })

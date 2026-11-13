@@ -1094,11 +1094,11 @@
   "options_customSettings": {
     "message": "Custom settings"
   },
-  "options_enableOverride": {
-    "message": "Enable override"
+  "options_resetCustomSetting": {
+    "message": "Reset to Default"
   },
-  "options_resetToGlobalDefaults": {
-    "message": "Reset to Global Defaults"
+  "options_clearOverrides": {
+    "message": "Clear Overrides"
   },
   "options_concurrencyLabel": {
     "message": "$SCOPE$ Concurrency",

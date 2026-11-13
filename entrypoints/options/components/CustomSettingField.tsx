@@ -1,5 +1,6 @@
-/** Render a typed site setting with an optional per-site override. */
+/** Render a typed setting defined by a site integration. */
 
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { cn } from "@/src/shared/utils"
 import { t } from "@/src/runtime/i18n"
 import type { SiteIntegrationSettingsField as SettingsFieldSchema } from "@/src/site-integrations/definition-types"
 import type { SiteIntegrationSettingValue } from "@/src/domain/site-integrations/storage-schemas"
@@ -23,72 +23,54 @@ interface CustomSettingFieldProps {
   /** Unique ID prefix for the integration (used to generate stable HTML IDs). */
   integrationId: string
   schema: SettingsFieldSchema
-  /** Whether this override is currently active (toggled on). */
-  enabled: boolean
-  /** The effective value to display (may come from the stored override or the schema default). */
   effectiveValue: CustomSettingValue
-  onChange: (
-    schema: SettingsFieldSchema,
-    enabled: boolean,
-    value: CustomSettingValue
-  ) => void
+  onChange: (value: CustomSettingValue) => void
+  onReset?: () => void
 }
 
-/**
- * A single custom setting control with an "enable override" toggle. The
- * field input is disabled when `enabled` is false to signal the value is
- * not active.
- */
 export function CustomSettingField({
   integrationId,
   schema,
-  enabled,
   effectiveValue,
   onChange,
+  onReset,
 }: CustomSettingFieldProps) {
   const controlId = `${integrationId}-custom-${schema.id}`
-  const overrideToggleId = `${controlId}-enabled`
-  const descriptionId = `${controlId}-description`
+  const descriptionId = schema.descriptionKey
+    ? `${controlId}-description`
+    : undefined
   const labelId = `${controlId}-label`
 
   return (
-    <div
-      key={`${integrationId}-${schema.id}`}
-      className="flex flex-col gap-3 rounded-md border border-border/70 p-4"
-    >
-      {/* Header: label + description + enable-override toggle */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-col gap-3 rounded-md border border-border/70 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
           {schema.type === "multiselect" ? (
             <p id={labelId} className="font-medium">
               {t(schema.labelKey)}
             </p>
           ) : (
-            <Label htmlFor={controlId} className="font-medium">
+            <Label htmlFor={controlId} id={labelId} className="font-medium">
               {t(schema.labelKey)}
             </Label>
           )}
           {schema.descriptionKey && (
-            <p id={descriptionId} className="text-[11px] text-muted-foreground">
+            <p id={descriptionId} className="text-xs text-muted-foreground">
               {t(schema.descriptionKey)}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Label
-            htmlFor={overrideToggleId}
-            className="text-[11px] text-muted-foreground"
+        {onReset && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-describedby={labelId}
+            onClick={onReset}
           >
-            {t("options_enableOverride")}
-          </Label>
-          <Switch
-            id={overrideToggleId}
-            checked={enabled}
-            onCheckedChange={(checked) =>
-              onChange(schema, checked, effectiveValue)
-            }
-          />
-        </div>
+            {t("options_resetCustomSetting")}
+          </Button>
+        )}
       </div>
 
       <CustomSettingControl
@@ -96,7 +78,6 @@ export function CustomSettingField({
         labelId={labelId}
         descriptionId={descriptionId}
         schema={schema}
-        enabled={enabled}
         effectiveValue={effectiveValue}
         onChange={onChange}
       />
@@ -104,23 +85,26 @@ export function CustomSettingField({
   )
 }
 
-type SettingControlProps = Omit<CustomSettingFieldProps, "integrationId"> & {
+type SettingControlProps = Pick<
+  CustomSettingFieldProps,
+  "schema" | "effectiveValue" | "onChange"
+> & {
   controlId: string
   labelId: string
-  descriptionId: string
+  descriptionId?: string
 }
 
 function CustomSettingControl(props: SettingControlProps) {
-  const { schema, controlId, enabled, effectiveValue, onChange } = props
+  const { schema, controlId, descriptionId, effectiveValue, onChange } = props
   switch (schema.type) {
     case "boolean":
       return (
         <Switch
           id={controlId}
+          aria-describedby={descriptionId}
           checked={Boolean(effectiveValue)}
-          disabled={!enabled}
           className="data-[state=unchecked]:bg-muted-foreground/25"
-          onCheckedChange={(checked) => onChange(schema, enabled, checked)}
+          onCheckedChange={onChange}
         />
       )
     case "string":
@@ -136,7 +120,7 @@ function CustomSettingControl(props: SettingControlProps) {
 function ScalarSettingControl({
   schema,
   controlId,
-  enabled,
+  descriptionId,
   effectiveValue,
   onChange,
 }: SettingControlProps & {
@@ -153,16 +137,12 @@ function ScalarSettingControl({
   return (
     <Input
       id={controlId}
+      aria-describedby={descriptionId}
       type={isNumber ? "number" : "text"}
       value={value}
-      disabled={!enabled}
       className="font-medium"
       onChange={(event) =>
-        onChange(
-          schema,
-          enabled,
-          isNumber ? Number(event.target.value) : event.target.value
-        )
+        onChange(isNumber ? Number(event.target.value) : event.target.value)
       }
     />
   )
@@ -171,7 +151,7 @@ function ScalarSettingControl({
 function SelectSettingControl({
   schema,
   controlId,
-  enabled,
+  descriptionId,
   effectiveValue,
   onChange,
 }: SettingControlProps & {
@@ -180,12 +160,12 @@ function SelectSettingControl({
   const selectValue =
     typeof effectiveValue === "string" ? effectiveValue : schema.defaultValue
   return (
-    <Select
-      value={selectValue}
-      disabled={!enabled}
-      onValueChange={(nextValue) => onChange(schema, enabled, nextValue)}
-    >
-      <SelectTrigger id={controlId} className="font-medium">
+    <Select value={selectValue} onValueChange={onChange}>
+      <SelectTrigger
+        id={controlId}
+        aria-describedby={descriptionId}
+        className="font-medium"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -209,7 +189,6 @@ function MultiselectSettingControl({
   controlId,
   labelId,
   descriptionId,
-  enabled,
   effectiveValue,
   onChange,
 }: SettingControlProps & {
@@ -224,7 +203,7 @@ function MultiselectSettingControl({
     <fieldset
       id={controlId}
       aria-labelledby={labelId}
-      aria-describedby={schema.descriptionKey ? descriptionId : undefined}
+      aria-describedby={descriptionId}
       className="grid gap-2 sm:grid-cols-2"
     >
       <legend className="sr-only">{t(schema.labelKey)}</legend>
@@ -233,21 +212,15 @@ function MultiselectSettingControl({
         return (
           <label
             key={`${schema.id}-ms-${option.value}`}
-            className={cn(
-              "flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm",
-              enabled
-                ? "cursor-pointer hover:bg-muted/40"
-                : "cursor-not-allowed bg-muted/20 text-muted-foreground/70"
-            )}
+            className="flex cursor-pointer items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm hover:bg-muted/40"
           >
             <Checkbox
               checked={isChecked}
-              disabled={!enabled}
               onCheckedChange={() => {
                 const nextValues = isChecked
                   ? multiselectValues.filter((v) => v !== option.value)
                   : [...multiselectValues, option.value]
-                onChange(schema, enabled, nextValues)
+                onChange(nextValues)
               }}
             />
             <span className="truncate">{t(option.labelKey)}</span>

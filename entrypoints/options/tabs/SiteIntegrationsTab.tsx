@@ -30,8 +30,7 @@ interface SiteIntegrationsTabProps {
   onSiteIntegrationSettingsChange: (
     siteIntegrationId: string,
     settingId: string,
-    enabled: boolean,
-    value: CustomSettingValue
+    value: CustomSettingValue | undefined
   ) => void
   onSiteIntegrationEnablementChange: (
     siteIntegrationId: string,
@@ -55,12 +54,8 @@ export function SiteIntegrationsTab({
   const [search, setSearch] = useState("")
   const [activeFilter, setActiveFilter] = useState<IntegrationFilter>("all")
   const overriddenIds = useMemo(
-    () =>
-      getOverriddenIntegrationIds(
-        overrides,
-        siteIntegrationSettingsByIntegration
-      ),
-    [overrides, siteIntegrationSettingsByIntegration]
+    () => getOverriddenIntegrationIds(overrides),
+    [overrides]
   )
   const { integrations, visibleIntegrations, enabledCount } = useMemo(
     () =>

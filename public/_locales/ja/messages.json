@@ -1094,11 +1094,11 @@
   "options_customSettings": {
     "message": "カスタム設定"
   },
-  "options_enableOverride": {
-    "message": "オーバーライドを有効化"
+  "options_resetCustomSetting": {
+    "message": "デフォルトに戻す"
   },
-  "options_resetToGlobalDefaults": {
-    "message": "グローバルデフォルトにリセット"
+  "options_clearOverrides": {
+    "message": "オーバーライドを解除"
   },
   "options_concurrencyLabel": {
     "message": "$SCOPE$ 並行数",

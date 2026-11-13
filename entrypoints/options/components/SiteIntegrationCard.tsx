@@ -1,4 +1,4 @@
-/** Per-integration enablement and output, rate, retry and custom overrides. */
+/** Per-integration enablement, shared-setting overrides, and custom settings. */
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,10 @@ import {
   SiteIntegrationRetrySettings,
   SiteIntegrationCustomSettings,
 } from "./SiteIntegrationCard-sections"
-import { updateSiteOverride } from "./SiteIntegrationCard-model"
+import {
+  hasSiteOverrides,
+  updateSiteOverride,
+} from "./SiteIntegrationCard-model"
 import type { SiteIntegrationCardProps } from "./SiteIntegrationCard-types"
 import type { SiteOverrideRecord } from "@/src/domain/site-integrations/storage-schemas"
 
@@ -30,23 +33,11 @@ export function SiteIntegrationCard({
   onChange,
 }: SiteIntegrationCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const hasOverrides =
-    Object.keys(override ?? {}).length > 0 ||
-    Object.keys(siteIntegrationSettingsValues).length > 0
+  const hasOverrides = hasSiteOverrides(override)
   const updateOverride = (updates: Partial<SiteOverrideRecord>) =>
     onChange(siteIntegration.id, updateSiteOverride(override, updates))
   const reset = () => {
     onChange(siteIntegration.id, null)
-    for (const schema of siteIntegration.customSettings ?? []) {
-      if (siteIntegrationSettingsValues[schema.id] !== undefined) {
-        onSiteIntegrationSettingsChange?.(
-          siteIntegration.id,
-          schema.id,
-          false,
-          schema.defaultValue
-        )
-      }
-    }
     setIsExpanded(false)
   }
   const sectionProps = {
@@ -79,6 +70,16 @@ export function SiteIntegrationCard({
             <SiteIntegrationOutputSettings {...sectionProps} />
             <SiteIntegrationRateSettings {...sectionProps} />
             <SiteIntegrationRetrySettings {...sectionProps} />
+            {hasOverrides && (
+              <Button
+                data-testid={`reset-site-integration-overrides-${siteIntegration.id}`}
+                variant="outline"
+                size="sm"
+                onClick={reset}
+              >
+                {t("options_clearOverrides")}
+              </Button>
+            )}
             <SiteIntegrationCustomSettings
               siteIntegration={siteIntegration}
               values={siteIntegrationSettingsValues}
@@ -87,19 +88,6 @@ export function SiteIntegrationCard({
             <IntegrationContributors
               contributors={siteIntegration.contributors}
             />
-            {hasOverrides && (
-              <div className="border-t border-border/70 pt-2">
-                <Button
-                  data-testid={`reset-site-integration-overrides-${siteIntegration.id}`}
-                  variant="outline"
-                  size="sm"
-                  onClick={reset}
-                  className="w-full"
-                >
-                  {t("options_resetToGlobalDefaults")}
-                </Button>
-              </div>
-            )}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>

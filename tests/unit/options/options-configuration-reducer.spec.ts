@@ -107,7 +107,6 @@ describe("options configuration reducer", () => {
       type: "set-integration-setting",
       siteIntegrationId: "mangadex",
       settingId: "imageQuality",
-      enabled: true,
       value: "data-saver",
     })
     expect(setting.draft?.integrationSettings).toEqual({
@@ -118,8 +117,7 @@ describe("options configuration reducer", () => {
       type: "set-integration-setting",
       siteIntegrationId: "mangadex",
       settingId: "imageQuality",
-      enabled: false,
-      value: "ignored",
+      value: undefined,
     })
     expect(deleted.draft?.integrationSettings).toEqual({})
     expect(deleted.draftRevision).toBe(3)
@@ -193,8 +191,7 @@ describe("options configuration reducer", () => {
       type: "set-integration-setting",
       siteIntegrationId: "mangadex",
       settingId: "imageQuality",
-      enabled: false,
-      value: "ignored",
+      value: undefined,
     })
     const latest = createSnapshot({
       settings: {

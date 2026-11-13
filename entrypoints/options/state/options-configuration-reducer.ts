@@ -214,8 +214,7 @@ export type OptionsConfigurationAction =
       type: "set-integration-setting"
       siteIntegrationId: string
       settingId: string
-      enabled: boolean
-      value: CustomSettingValue
+      value: CustomSettingValue | undefined
     }
   | {
       type: "record-external-conflict"
@@ -318,7 +317,7 @@ function editIntegrationSetting(
 ): OptionsConfigurationSnapshot {
   const integrationSettings = { ...draft.integrationSettings }
   const settings = { ...(integrationSettings[action.siteIntegrationId] ?? {}) }
-  if (action.enabled) settings[action.settingId] = action.value
+  if (action.value !== undefined) settings[action.settingId] = action.value
   else delete settings[action.settingId]
   if (Object.keys(settings).length === 0)
     delete integrationSettings[action.siteIntegrationId]

@@ -37,8 +37,7 @@ export interface SiteIntegrationCardProps {
   onSiteIntegrationSettingsChange?: (
     siteIntegrationId: string,
     settingId: string,
-    enabled: boolean,
-    value: CustomSettingValue
+    value: CustomSettingValue | undefined
   ) => void
   onChange: (
     siteIntegrationId: string,

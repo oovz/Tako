@@ -66,7 +66,7 @@ describe("Site integration custom settings contract", () => {
     ).toThrow(/duplicate option value/)
   })
 
-  it("renders dynamic custom setting controls with per-setting enable toggle", () => {
+  it("renders dynamic MangaDex controls from the integration definition", () => {
     const mangadex = getDefinition("mangadex")
     expect(mangadex).toBeDefined()
 
@@ -94,9 +94,8 @@ describe("Site integration custom settings contract", () => {
 
     expect(html).toContain("Custom settings")
     expect(html).toContain('aria-label="Enable MangaDex"')
-    expect(html).toContain("Enable override")
-    expect(html).toContain('for="mangadex-custom-imageQuality-enabled"')
-    expect(html).toContain('id="mangadex-custom-imageQuality-enabled"')
+    expect(html).toContain('for="mangadex-custom-imageQuality"')
+    expect(html).toContain('id="mangadex-custom-imageQuality"')
     expect(html).toContain("Image quality")
   })
 

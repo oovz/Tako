@@ -1094,11 +1094,11 @@
   "options_customSettings": {
     "message": "自訂設定"
   },
-  "options_enableOverride": {
-    "message": "啟用覆蓋"
+  "options_resetCustomSetting": {
+    "message": "恢復預設值"
   },
-  "options_resetToGlobalDefaults": {
-    "message": "重置為全域預設值"
+  "options_clearOverrides": {
+    "message": "清除覆蓋設定"
   },
   "options_concurrencyLabel": {
     "message": "$SCOPE$ 並行數",

@@ -62,14 +62,12 @@ export function useOptionsEdits(
     handleSiteIntegrationSettingsChange: (
       siteIntegrationId: string,
       settingId: string,
-      enabled: boolean,
-      value: CustomSettingValue
+      value: CustomSettingValue | undefined
     ) =>
       dispatch({
         type: "set-integration-setting",
         siteIntegrationId,
         settingId,
-        enabled,
         value,
       }),
     handleOverrideChange: (

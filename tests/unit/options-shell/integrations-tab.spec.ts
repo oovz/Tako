@@ -11,12 +11,14 @@ import { t } from "@/src/runtime/i18n"
 let root: Root
 let container: HTMLDivElement
 const props = {
-  overrides: { mangadex: { outputFormat: "zip" as const } },
+  overrides: {
+    comictropics: { retries: { image: 0 } },
+    mangadex: { outputFormat: "zip" as const },
+  },
   siteIntegrationEnablement: { mangadex: false },
   globalSettings: DEFAULT_SETTINGS,
   siteIntegrationSettingsByIntegration: {
-    comictropics: { fixture: false },
-    mangadex: { fixture: "" },
+    mangadex: { autoReadMangaDexSettings: false },
   },
   onSiteIntegrationSettingsChange: vi.fn(),
   onSiteIntegrationEnablementChange: vi.fn(),
@@ -82,6 +84,20 @@ it("lists shipped integrations with each overridden integration counted once and
   await act(async () => viewOverrides!.click())
   expect(cards()).toEqual(["comictropics", "mangadex"])
   expect(container.contains(viewOverrides!)).toBe(false)
+})
+
+it("ignores provider preferences and empty records in the override summary and filter", async () => {
+  await act(async () =>
+    root.render(
+      createElement(SiteIntegrationsTab, {
+        ...props,
+        overrides: { comictropics: { retries: {} } },
+      })
+    )
+  )
+  expect(container.textContent).not.toContain("View overrides")
+  expect(container.textContent).not.toContain("Overrides (")
+  expect(cards()).toContain("mangadex")
 })
 
 it("combines explicit enablement and search while preserving catalog defaults", async () => {

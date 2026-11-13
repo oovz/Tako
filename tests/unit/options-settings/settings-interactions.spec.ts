@@ -212,14 +212,13 @@ const customSchemas: SiteIntegrationSettingsField[] = [
 ]
 
 describe("custom setting controls", () => {
-  it("displays a stored string override before reporting an edit", async () => {
+  it("displays a stored string before reporting an edit", async () => {
     const schema = customSchemas[1]!
     const onChange = vi.fn()
     await render(
       createElement(CustomSettingField, {
         integrationId: "site",
         schema,
-        enabled: true,
         effectiveValue: "saved text",
         onChange,
       })
@@ -228,30 +227,7 @@ describe("custom setting controls", () => {
       container.querySelector<HTMLInputElement>("#site-custom-text")!.value
     ).toBe("saved text")
     await enter("#site-custom-text", "edited text")
-    expect(onChange).toHaveBeenCalledExactlyOnceWith(
-      schema,
-      true,
-      "edited text"
-    )
-  })
-
-  it("toggles the override with its current value and disables inherited controls", async () => {
-    const schema = customSchemas[1]!
-    const onChange = vi.fn()
-    await render(
-      createElement(CustomSettingField, {
-        integrationId: "site",
-        schema,
-        enabled: false,
-        effectiveValue: "inherited",
-        onChange,
-      })
-    )
-    expect(
-      container.querySelector<HTMLInputElement>("#site-custom-text")!.disabled
-    ).toBe(true)
-    await click("#site-custom-text-enabled")
-    expect(onChange).toHaveBeenCalledWith(schema, true, "inherited")
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("edited text")
   })
 
   it.each([
@@ -266,14 +242,13 @@ describe("custom setting controls", () => {
         createElement(CustomSettingField, {
           integrationId: "site",
           schema,
-          enabled: true,
           effectiveValue: value,
           onChange,
         })
       )
       if (schema.type === "boolean") await click(`#site-custom-${schema.id}`)
       else await enter(`#site-custom-${schema.id}`, String(expected))
-      expect(onChange).toHaveBeenCalledWith(schema, true, expected)
+      expect(onChange).toHaveBeenCalledWith(expected)
     }
   )
 
@@ -284,19 +259,18 @@ describe("custom setting controls", () => {
       createElement(CustomSettingField, {
         integrationId: "site",
         schema,
-        enabled: true,
         effectiveValue: "a",
         onChange,
       })
     )
     await select("#site-custom-select", "B")
-    expect(onChange).toHaveBeenCalledWith(schema, true, "b")
+    expect(onChange).toHaveBeenCalledWith("b")
   })
 
   it("adds and removes selected values while retaining the other selections", async () => {
     const schema = customSchemas[4]!
     const onChange = vi.fn()
-    const props = { integrationId: "site", schema, enabled: true, onChange }
+    const props = { integrationId: "site", schema, onChange }
     await render(
       createElement(CustomSettingField, { ...props, effectiveValue: ["en"] })
     )
@@ -305,13 +279,13 @@ describe("custom setting controls", () => {
         .querySelectorAll<HTMLElement>('fieldset [role="checkbox"]')[0]!
         .click()
     )
-    expect(onChange).toHaveBeenLastCalledWith(schema, true, [])
+    expect(onChange).toHaveBeenLastCalledWith([])
     await act(async () =>
       container
         .querySelectorAll<HTMLElement>('fieldset [role="checkbox"]')[1]!
         .click()
     )
-    expect(onChange).toHaveBeenLastCalledWith(schema, true, ["en", "ja"])
+    expect(onChange).toHaveBeenLastCalledWith(["en", "ja"])
   })
 })
 
@@ -366,7 +340,16 @@ describe("integration overrides", () => {
     expect(source("site-format")).toContain("options_globalDefault")
   })
 
-  it("labels and displays the stored MangaDex quality override before saving another allowed option", async () => {
+  it("allows MangaDex settings to be edited without enabling an override", async () => {
+    await openCard(cardProps({ siteIntegration: mangadex }))
+    const quality = container.querySelector<HTMLButtonElement>(
+      "#mangadex-custom-imageQuality"
+    )!
+    expect(quality.disabled).toBe(false)
+    expect(container.textContent).not.toContain("options_enableOverride")
+  })
+
+  it("labels and displays the stored MangaDex quality before saving another allowed option", async () => {
     const quality = mangadex.customSettings!.find(
       (field) => field.id === "imageQuality"
     )!
@@ -392,16 +375,10 @@ describe("integration overrides", () => {
     expect(label?.control).toBe(control)
     expect(control.disabled).toBe(false)
     expect(control.textContent).toBe(original.labelKey)
-    expect(
-      container
-        .querySelector("#mangadex-custom-imageQuality-enabled")!
-        .getAttribute("aria-checked")
-    ).toBe("true")
     await select("#mangadex-custom-imageQuality", saver.labelKey)
     expect(onSiteIntegrationSettingsChange).toHaveBeenCalledExactlyOnceWith(
       "mangadex",
       "imageQuality",
-      true,
       "data-saver"
     )
     await openCard({
@@ -546,7 +523,7 @@ describe("integration overrides", () => {
     expect(props.onChange).toHaveBeenLastCalledWith("site", null)
   })
 
-  it("resets only active custom settings, clears policy overrides, and closes configuration", async () => {
+  it("resets only the selected custom setting and clears shared overrides independently", async () => {
     const onSiteIntegrationSettingsChange = vi.fn()
     const props = cardProps({
       override: { outputFormat: "zip" },
@@ -554,17 +531,21 @@ describe("integration overrides", () => {
       onSiteIntegrationSettingsChange,
     })
     await openCard(props)
+    const resetCustom = container.querySelector<HTMLButtonElement>(
+      'button[aria-describedby="site-custom-bool-label"]'
+    )!
+    await act(async () => resetCustom.click())
+    expect(onSiteIntegrationSettingsChange).toHaveBeenCalledExactlyOnceWith(
+      "site",
+      "bool",
+      undefined
+    )
+    expect(props.onChange).not.toHaveBeenCalled()
+
+    onSiteIntegrationSettingsChange.mockClear()
     await click('[data-testid="reset-site-integration-overrides-site"]')
     expect(props.onChange).toHaveBeenCalledWith("site", null)
-    expect(onSiteIntegrationSettingsChange.mock.calls).toEqual([
-      ["site", "bool", false, false],
-      ["site", "number", false, 5],
-    ])
-    expect(
-      container
-        .querySelector('[data-testid="configure-site-integration-site"]')!
-        .getAttribute("aria-expanded")
-    ).toBe("false")
+    expect(onSiteIntegrationSettingsChange).not.toHaveBeenCalled()
   })
 
   it("supports absent optional callbacks and sends integration identity when enabled", async () => {
@@ -574,8 +555,11 @@ describe("integration overrides", () => {
     await openCard(props)
     await enter("#site-custom-text", "changed")
     await click("#site-integration-enabled")
-    await click('[data-testid="reset-site-integration-overrides-site"]')
-    expect(props.onChange).toHaveBeenCalledWith("site", null)
+    expect(
+      container.querySelector(
+        '[data-testid="reset-site-integration-overrides-site"]'
+      )
+    ).toBeNull()
     const onEnabledChange = vi.fn()
     await render(
       createElement(SiteIntegrationCard, { ...props, onEnabledChange })

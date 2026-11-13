@@ -245,17 +245,21 @@ export function SiteIntegrationCustomSettings({
       <div className="flex flex-col gap-3">
         {customSettings.map((schema) => {
           const storedValue = values[schema.id]
+          const changeValue = (value: typeof storedValue | undefined) =>
+            onChange?.(siteIntegration.id, schema.id, value)
           return (
             <CustomSettingField
               key={`${siteIntegration.id}-${schema.id}`}
               integrationId={siteIntegration.id}
               schema={schema}
-              enabled={storedValue !== undefined}
               effectiveValue={
                 storedValue === undefined ? schema.defaultValue : storedValue
               }
-              onChange={(schema, enabled, value) =>
-                onChange?.(siteIntegration.id, schema.id, enabled, value)
+              onChange={changeValue}
+              onReset={
+                onChange && storedValue !== undefined
+                  ? () => changeValue(undefined)
+                  : undefined
               }
             />
           )

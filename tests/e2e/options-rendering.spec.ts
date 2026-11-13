@@ -512,6 +512,60 @@ test("uses shared macro shortcuts for a persisted site path override", async ({
   await expect(card.getByText("Override", { exact: true })).toHaveCount(0)
 })
 
+test("edits MangaDex settings directly and clears shared overrides independently", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(
+    `chrome-extension://${extensionId}/options.html?tab=integrations`
+  )
+  const card = page.getByTestId("site-integration-card-mangadex")
+  const configure = page.getByTestId("configure-site-integration-mangadex")
+  const quality = card.getByRole("combobox", { name: "Image quality" })
+  const imageRetries = card.getByRole("spinbutton", { name: "Image Retries" })
+  const chapterRetries = card.getByRole("spinbutton", {
+    name: "Chapter Retries",
+  })
+  const viewOverrides = page.getByRole("button", { name: "View overrides" })
+  const save = page.getByRole("button", { name: "Save Changes", exact: true })
+
+  await configure.click()
+  await expect(quality).toHaveText("Data saver")
+  await quality.evaluate((control) =>
+    control.scrollIntoView({ block: "center" })
+  )
+  await quality.click()
+  const fullQuality = page.getByRole("option", { name: "Full quality" })
+  await expect(fullQuality).toBeInViewport()
+  await fullQuality.click()
+  await expect(viewOverrides).toBeHidden()
+  await expect(imageRetries).toHaveAccessibleDescription("Global Default")
+  await imageRetries.fill("0")
+  await expect(imageRetries).toHaveAccessibleDescription("Override")
+  await expect(chapterRetries).toHaveAccessibleDescription("Global Default")
+  await expect(viewOverrides).toBeVisible()
+  await save.click()
+  await expect(save).toBeHidden()
+
+  await page.reload()
+  await configure.click()
+  await expect(quality).toHaveText("Full quality")
+  await expect(imageRetries).toHaveValue("0")
+  await card.getByRole("button", { name: "Clear Overrides" }).click()
+  await expect(viewOverrides).toBeHidden()
+  await configure.click()
+  await expect(quality).toHaveText("Full quality")
+  await expect(imageRetries).toHaveAccessibleDescription("Global Default")
+  await card.getByRole("button", { name: "Reset to Default" }).click()
+  await expect(quality).toHaveText("Data saver")
+  await save.click()
+  await expect(save).toBeHidden()
+  await page.reload()
+  await configure.click()
+  await expect(quality).toHaveText("Data saver")
+  await expect(viewOverrides).toBeHidden()
+})
+
 test("replays a finite pacing example and stops motion when the OS preference changes", async ({
   page,
   extensionId,

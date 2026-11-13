@@ -1094,11 +1094,11 @@
   "options_customSettings": {
     "message": "사용자 지정 설정"
   },
-  "options_enableOverride": {
-    "message": "개별 설정 사용"
+  "options_resetCustomSetting": {
+    "message": "기본값으로 초기화"
   },
-  "options_resetToGlobalDefaults": {
-    "message": "전체 기본값으로 초기화"
+  "options_clearOverrides": {
+    "message": "개별 설정 해제"
   },
   "options_concurrencyLabel": {
     "message": "$SCOPE$ 동시 요청 수",
