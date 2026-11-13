@@ -1005,16 +1005,19 @@
   "options_searchIntegrations": {
     "message": "名前またはドメインでサイト統合を検索..."
   },
+  "options_activeOverrideSingle": {
+    "message": "1 件のサイト統合にオーバーライドが設定されています。"
+  },
   "options_activeOverrides": {
-    "message": "$COUNT$ 件の$WORD$にアクティブなオーバーライドがあります。",
+    "message": "$COUNT$ 件のサイト統合にオーバーライドが設定されています。",
     "placeholders": {
       "count": {
         "content": "$1"
-      },
-      "word": {
-        "content": "$2"
       }
     }
+  },
+  "options_viewOverrides": {
+    "message": "オーバーライドを表示"
   },
   "options_noIntegrationsFound": {
     "message": "統合が見つかりません"
@@ -1604,15 +1607,6 @@
   },
   "options_searchSiteIntegrations": {
     "message": "名前またはドメインでサイト統合を検索..."
-  },
-  "options_overrides": {
-    "message": "オーバーライド"
-  },
-  "options_integrationsPlural": {
-    "message": "統合"
-  },
-  "options_integrationSingular": {
-    "message": "統合"
   },
   "options_cbzFull": {
     "message": "CBZ（コミックブックアーカイブ）"

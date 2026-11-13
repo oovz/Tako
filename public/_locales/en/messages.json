@@ -1005,16 +1005,19 @@
   "options_searchIntegrations": {
     "message": "Search site integrations by name or domain..."
   },
+  "options_activeOverrideSingle": {
+    "message": "1 site integration has overrides."
+  },
   "options_activeOverrides": {
-    "message": "You have active overrides for $COUNT$ $WORD$.",
+    "message": "$COUNT$ site integrations have overrides.",
     "placeholders": {
       "count": {
         "content": "$1"
-      },
-      "word": {
-        "content": "$2"
       }
     }
+  },
+  "options_viewOverrides": {
+    "message": "View overrides"
   },
   "options_noIntegrationsFound": {
     "message": "No integrations found"
@@ -1607,15 +1610,6 @@
   },
   "options_searchSiteIntegrations": {
     "message": "Search site integrations by name or domain..."
-  },
-  "options_overrides": {
-    "message": "Overrides"
-  },
-  "options_integrationsPlural": {
-    "message": "integrations"
-  },
-  "options_integrationSingular": {
-    "message": "integration"
   },
   "options_cbzFull": {
     "message": "CBZ (Comic Book Archive)"

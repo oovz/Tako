@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Search } from "lucide-react"
+import { Search, SlidersHorizontal } from "lucide-react"
 import { SiteIntegrationCard } from "../components/SiteIntegrationCard"
 import {
   getOverriddenIntegrationIds,
@@ -117,29 +116,24 @@ export function SiteIntegrationsTab({
 
       {/* Active Overrides Summary Banner */}
       {overridesCount > 0 && activeFilter !== "overrides" && (
-        <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-primary/40 bg-background text-xs font-semibold text-primary"
-            >
-              {t("options_overrides")}
-            </Badge>
+            <SlidersHorizontal
+              className="size-4 shrink-0 text-primary"
+              aria-hidden="true"
+            />
             <span>
-              {t("options_activeOverrides", [
-                String(overridesCount),
-                overridesCount !== 1
-                  ? t("options_integrationsPlural")
-                  : t("options_integrationSingular"),
-              ])}
+              {overridesCount === 1
+                ? t("options_activeOverrideSingle")
+                : t("options_activeOverrides", String(overridesCount))}
             </span>
           </div>
           <button
             type="button"
             onClick={() => setActiveFilter("overrides")}
-            className="text-xs font-medium text-primary hover:underline cursor-pointer"
+            className="shrink-0 cursor-pointer text-xs font-medium text-primary hover:underline"
           >
-            {t("common_show") || "View"}
+            {t("options_viewOverrides")}
           </button>
         </div>
       )}

@@ -1005,16 +1005,19 @@
   "options_searchIntegrations": {
     "message": "이름이나 도메인으로 사이트 연동 검색..."
   },
+  "options_activeOverrideSingle": {
+    "message": "사이트 연동 1개에 개별 설정이 있습니다."
+  },
   "options_activeOverrides": {
-    "message": "$WORD$ $COUNT$개에 개별 설정을 사용 중입니다.",
+    "message": "사이트 연동 $COUNT$개에 개별 설정이 있습니다.",
     "placeholders": {
       "count": {
         "content": "$1"
-      },
-      "word": {
-        "content": "$2"
       }
     }
+  },
+  "options_viewOverrides": {
+    "message": "개별 설정 보기"
   },
   "options_noIntegrationsFound": {
     "message": "사이트 연동을 찾지 못했습니다"
@@ -1607,15 +1610,6 @@
   },
   "options_searchSiteIntegrations": {
     "message": "이름이나 도메인으로 사이트 연동 검색..."
-  },
-  "options_overrides": {
-    "message": "개별 설정"
-  },
-  "options_integrationsPlural": {
-    "message": "사이트 연동"
-  },
-  "options_integrationSingular": {
-    "message": "사이트 연동"
   },
   "options_cbzFull": {
     "message": "CBZ(만화 압축 파일)"

@@ -44,6 +44,41 @@ test.describe("UI preferences", () => {
     })
   }
 
+  test("shows the override banner in the selected Options language", async ({
+    extensionId,
+    page,
+  }) => {
+    const options = new OptionsPageObject(page, extensionId)
+    await options.navigate()
+    await page.locator("#ui-language").click()
+    await page.getByRole("option", { name: "简体中文" }).click()
+    await page
+      .getByRole("button", { name: "Save Changes", exact: true })
+      .click()
+    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
+
+    await options.navigate("integrations")
+    const viewOverrides = page.getByRole("button", { name: "查看覆盖设置" })
+    await expect(viewOverrides).toBeHidden()
+    await page.getByTestId("configure-site-integration-mangadex").click()
+    await page.locator("#mangadex-format").click()
+    await page.getByRole("option", { name: "ZIP", exact: true }).click()
+
+    const summary = page.getByText("有 1 个站点使用覆盖设置。", { exact: true })
+    await expect(summary).toBeVisible()
+    await expect(
+      summary
+        .locator("..")
+        .locator("svg.lucide-sliders-horizontal[aria-hidden='true']")
+    ).toBeVisible()
+    await viewOverrides.click()
+    await expect(summary).toBeHidden()
+    await expect(page.getByTestId(/^site-integration-card-/)).toHaveCount(1)
+    await expect(
+      page.getByTestId("site-integration-card-mangadex")
+    ).toBeVisible()
+  })
+
   test("previews, saves, and synchronizes both motion preferences", async ({
     context,
     extensionId,

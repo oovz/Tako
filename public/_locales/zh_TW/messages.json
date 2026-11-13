@@ -1005,16 +1005,19 @@
   "options_searchIntegrations": {
     "message": "按名稱或網域搜尋網站整合..."
   },
+  "options_activeOverrideSingle": {
+    "message": "有 1 個網站使用覆蓋設定。"
+  },
   "options_activeOverrides": {
-    "message": "您有 $COUNT$ 個$WORD$的活躍覆蓋。",
+    "message": "有 $COUNT$ 個網站使用覆蓋設定。",
     "placeholders": {
       "count": {
         "content": "$1"
-      },
-      "word": {
-        "content": "$2"
       }
     }
+  },
+  "options_viewOverrides": {
+    "message": "查看覆蓋設定"
   },
   "options_noIntegrationsFound": {
     "message": "未找到整合"
@@ -1604,15 +1607,6 @@
   },
   "options_searchSiteIntegrations": {
     "message": "按名稱或域名搜尋站點整合..."
-  },
-  "options_overrides": {
-    "message": "覆蓋"
-  },
-  "options_integrationsPlural": {
-    "message": "個整合"
-  },
-  "options_integrationSingular": {
-    "message": "個整合"
   },
   "options_cbzFull": {
     "message": "CBZ（漫畫存檔）"

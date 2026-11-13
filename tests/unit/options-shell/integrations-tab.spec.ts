@@ -74,11 +74,14 @@ it("lists shipped integrations with each overridden integration counted once and
     (item) => item.textContent === `${t("common_overrides")} (2)`
   )
   expect(overridesButton).toBeDefined()
-  await filter("common_overrides")
-  expect(cards()).toEqual(["comictropics", "mangadex"])
-  expect(container.textContent).not.toContain(
-    t("options_activeOverrides", ["2", t("options_integrationsPlural")])
+  const viewOverrides = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent === "View overrides"
   )
+  expect(viewOverrides).toBeDefined()
+  expect(container.textContent).toContain("2 site integrations have overrides.")
+  await act(async () => viewOverrides!.click())
+  expect(cards()).toEqual(["comictropics", "mangadex"])
+  expect(container.contains(viewOverrides!)).toBe(false)
 })
 
 it("combines explicit enablement and search while preserving catalog defaults", async () => {
@@ -115,6 +118,7 @@ it("filters a single override for reset and keeps all integrations reachable aft
     siteIntegrationSettingsByIntegration: {},
   }
   await act(async () => root.render(createElement(SiteIntegrationsTab, single)))
+  expect(container.textContent).toContain("1 site integration has overrides.")
   await filter("common_overrides")
   expect(cards()).toEqual(["mangadex"])
   await act(async () =>
