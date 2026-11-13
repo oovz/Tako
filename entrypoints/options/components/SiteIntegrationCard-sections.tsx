@@ -1,6 +1,4 @@
 import { TemplateMacros } from "./primitives/TemplateMacros"
-import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -18,33 +16,13 @@ import {
 import type { SiteOverrideRecord } from "@/src/domain/site-integrations/storage-schemas"
 import { RateLimitingForm } from "./RateLimitingForm"
 import { CustomSettingField } from "./CustomSettingField"
+import { SettingSourceLabel } from "./SettingSourceLabel"
 import type { SiteIntegrationCardProps } from "./SiteIntegrationCard-types"
 
 type OverrideSectionProps = Pick<
   SiteIntegrationCardProps,
   "siteIntegration" | "override" | "globalDefaults"
 > & { updateOverride: (updates: Partial<SiteOverrideRecord>) => void }
-
-function OverrideLabel({
-  id,
-  label,
-  overridden,
-}: {
-  id: string
-  label: string
-  overridden: boolean
-}) {
-  return (
-    <Label htmlFor={id}>
-      {t(label)}
-      {overridden && (
-        <Badge variant="outline" className="ml-2 text-xs font-medium">
-          {t("options_override")}
-        </Badge>
-      )}
-    </Label>
-  )
-}
 
 export function SiteIntegrationOutputSettings({
   siteIntegration,
@@ -56,10 +34,10 @@ export function SiteIntegrationOutputSettings({
     <div className="flex flex-col gap-3">
       <h4 className="text-sm font-semibold">{t("options_downloadSettings")}</h4>
       <div className="flex flex-col gap-2">
-        <OverrideLabel
+        <SettingSourceLabel
           id={`${siteIntegration.id}-format`}
-          label="options_archiveFormat"
-          overridden={override?.outputFormat !== undefined}
+          label={t("options_archiveFormat")}
+          source={override?.outputFormat !== undefined ? "override" : "global"}
         />
         <Select
           value={override?.outputFormat ?? globalDefaults.outputFormat}
@@ -72,6 +50,7 @@ export function SiteIntegrationOutputSettings({
         >
           <SelectTrigger
             id={`${siteIntegration.id}-format`}
+            aria-describedby={`${siteIntegration.id}-format-source`}
             className="font-medium"
           >
             <SelectValue />
@@ -87,10 +66,10 @@ export function SiteIntegrationOutputSettings({
       </div>
 
       <div className="flex flex-col gap-2">
-        <OverrideLabel
+        <SettingSourceLabel
           id={`${siteIntegration.id}-path`}
-          label="options_directoryPathTemplate"
-          overridden={override?.pathTemplate !== undefined}
+          label={t("options_directoryPathTemplate")}
+          source={override?.pathTemplate !== undefined ? "override" : "global"}
         />
         <p
           id={`${siteIntegration.id}-path-help`}
@@ -100,7 +79,7 @@ export function SiteIntegrationOutputSettings({
         </p>
         <Input
           id={`${siteIntegration.id}-path`}
-          aria-describedby={`${siteIntegration.id}-path-help`}
+          aria-describedby={`${siteIntegration.id}-path-source ${siteIntegration.id}-path-help`}
           value={override?.pathTemplate ?? ""}
           onChange={(e) =>
             updateOverride({
@@ -135,6 +114,7 @@ export function SiteIntegrationRateSettings({
           {t("options_rateLimitingImages")}
         </h4>
         <RateLimitingForm
+          integrationId={siteIntegration.id}
           scope="image"
           value={override?.imagePolicy || {}}
           onChange={(value) =>
@@ -154,6 +134,7 @@ export function SiteIntegrationRateSettings({
           {t("options_rateLimitingChapters")}
         </h4>
         <RateLimitingForm
+          integrationId={siteIntegration.id}
           scope="chapter"
           value={override?.chapterPolicy || {}}
           onChange={(value) =>
@@ -188,13 +169,16 @@ function RetryField({
   const id = `${integrationId}-${scope}-retries`
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>
-        {t(
+      <SettingSourceLabel
+        id={id}
+        label={t(
           scope === "image" ? "options_imageRetries" : "options_chapterRetries"
         )}
-      </Label>
+        source={value?.[scope] !== undefined ? "override" : "global"}
+      />
       <Input
         id={id}
+        aria-describedby={`${id}-source`}
         type="number"
         min={0}
         max={10}

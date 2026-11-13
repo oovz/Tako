@@ -1,20 +1,17 @@
 /** Rate policy inputs and the hierarchy that supplies inherited values. */
 
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import { t } from "@/src/runtime/i18n"
 import {
   parseOptionalRatePolicyInteger,
   RATE_POLICY_LIMITS,
 } from "@/src/shared/rate-policy-limits"
-import {
-  resolveRatePolicyField,
-  type RatePolicySource,
-} from "./RateLimitingForm-policy"
+import { resolveRatePolicyField } from "./RateLimitingForm-policy"
+import { SettingSourceLabel } from "./SettingSourceLabel"
 
 interface RateLimitingFormProps {
+  integrationId: string
   scope: "image" | "chapter"
   value: Partial<RateScopePolicy>
   onChange: (value: Partial<RateScopePolicy>) => void
@@ -48,26 +45,9 @@ const POLICY_FIELDS = {
   },
 } as const
 
-const SOURCE_BADGES = {
-  override: { variant: "default", label: "options_override" },
-  siteIntegration: {
-    variant: "secondary",
-    label: "options_siteIntegrationBadge",
-  },
-  global: { variant: "outline", label: "options_global" },
-} as const
-
-function PolicySourceBadge({ source }: { source: RatePolicySource }) {
-  const badge = SOURCE_BADGES[source]
-  return (
-    <Badge variant={badge.variant} className="ml-2 text-xs">
-      {t(badge.label)}
-    </Badge>
-  )
-}
-
 function NumericPolicyField({
   field,
+  integrationId,
   scope,
   value,
   onChange,
@@ -85,15 +65,17 @@ function NumericPolicyField({
   )
   const localizedScope =
     scope === "image" ? t("options_images") : t("options_chapter")
-  const id = `${scope}-${definition.id}`
+  const id = `${integrationId}-${scope}-${definition.id}`
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center">
-        <Label htmlFor={id}>{t(definition.label, [localizedScope])}</Label>
-        {showHierarchy && <PolicySourceBadge source={effective.source} />}
-      </div>
+      <SettingSourceLabel
+        id={id}
+        label={t(definition.label, [localizedScope])}
+        source={showHierarchy ? effective.source : undefined}
+      />
       <Input
         id={id}
+        aria-describedby={showHierarchy ? `${id}-source` : undefined}
         type="number"
         min={definition.minimum}
         max={definition.maximum}

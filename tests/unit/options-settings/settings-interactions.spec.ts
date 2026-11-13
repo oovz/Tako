@@ -69,10 +69,18 @@ async function select(selector: string, value: string) {
   await act(async () => option!.click())
 }
 
+function source(id: string) {
+  const control = container.querySelector(`#${id}`)!
+  const descriptions =
+    control.getAttribute("aria-describedby")?.split(" ") ?? []
+  return descriptions.map((id) => document.getElementById(id)?.textContent)
+}
+
 describe("rate policy controls", () => {
   it("keeps zero overrides and resolves each field's value and source independently", async () => {
     await render(
       createElement(RateLimitingForm, {
+        integrationId: "site",
         scope: "image",
         value: { delayMs: 0 },
         onChange: vi.fn(),
@@ -82,13 +90,16 @@ describe("rate policy controls", () => {
       })
     )
     expect(
-      container.querySelector<HTMLInputElement>("#image-concurrency")!
+      container.querySelector<HTMLInputElement>("#site-image-concurrency")!
         .placeholder
     ).toBe("options_defaultValue:3")
     expect(
-      container.querySelector<HTMLInputElement>("#image-delay")!.value
+      container.querySelector<HTMLInputElement>("#site-image-delay")!.value
     ).toBe("0")
-    expect(container.textContent).toContain("options_siteIntegrationBadge")
+    expect(source("site-image-concurrency")).toContain(
+      "options_siteIntegrationDefault"
+    )
+    expect(source("site-image-delay")).toContain("options_override")
     expect(container.textContent).toContain("options_override")
     expect(container.textContent).toContain("options_usingValue:3")
     expect(container.textContent).not.toContain("options_usingMs")
@@ -96,6 +107,7 @@ describe("rate policy controls", () => {
 
   it("inherits global zero delay and built-in defaults without inventing an override", async () => {
     const props = {
+      integrationId: "site",
       scope: "image" as const,
       value: {},
       onChange: vi.fn(),
@@ -111,11 +123,12 @@ describe("rate policy controls", () => {
     expect(container.textContent).toContain("options_usingValue:6")
     await render(createElement(RateLimitingForm, props))
     expect(
-      container.querySelector<HTMLInputElement>("#image-concurrency")!
+      container.querySelector<HTMLInputElement>("#site-image-concurrency")!
         .placeholder
     ).toBe("options_defaultValue:2")
     expect(
-      container.querySelector<HTMLInputElement>("#image-delay")!.placeholder
+      container.querySelector<HTMLInputElement>("#site-image-delay")!
+        .placeholder
     ).toBe("options_defaultValue:500")
     expect(container.textContent).not.toContain("options_policyHierarchy")
     expect(props.onChange).not.toHaveBeenCalled()
@@ -125,22 +138,23 @@ describe("rate policy controls", () => {
     const onChange = vi.fn()
     await render(
       createElement(RateLimitingForm, {
+        integrationId: "site",
         scope: "image",
         value: { concurrency: 4, delayMs: 100 },
         onChange,
       })
     )
-    await enter("#image-concurrency", "99")
+    await enter("#site-image-concurrency", "99")
     expect(onChange).toHaveBeenLastCalledWith({ concurrency: 10, delayMs: 100 })
-    await enter("#image-concurrency", "0")
+    await enter("#site-image-concurrency", "0")
     expect(onChange).toHaveBeenLastCalledWith({ concurrency: 1, delayMs: 100 })
-    await enter("#image-delay", "0")
+    await enter("#site-image-delay", "0")
     expect(onChange).toHaveBeenLastCalledWith({ concurrency: 4, delayMs: 0 })
-    await enter("#image-delay", "5001")
+    await enter("#site-image-delay", "5001")
     expect(onChange).toHaveBeenLastCalledWith({ concurrency: 4, delayMs: 5000 })
-    await enter("#image-delay", "42.9")
+    await enter("#site-image-delay", "42.9")
     expect(onChange).toHaveBeenLastCalledWith({ concurrency: 4, delayMs: 42 })
-    await enter("#image-delay", "")
+    await enter("#site-image-delay", "")
     expect(onChange).toHaveBeenLastCalledWith({
       concurrency: 4,
       delayMs: undefined,
@@ -150,6 +164,7 @@ describe("rate policy controls", () => {
   it("shows chapter delay hierarchy without concurrency and disables inputs when requested", async () => {
     await render(
       createElement(RateLimitingForm, {
+        integrationId: "site",
         scope: "chapter",
         value: {},
         onChange: vi.fn(),
@@ -160,9 +175,9 @@ describe("rate policy controls", () => {
         globalValue: { concurrency: 1, delayMs: 700 },
       })
     )
-    expect(container.querySelector("#chapter-concurrency")).toBeNull()
+    expect(container.querySelector("#site-chapter-concurrency")).toBeNull()
     expect(
-      container.querySelector<HTMLInputElement>("#chapter-delay")!.disabled
+      container.querySelector<HTMLInputElement>("#site-chapter-delay")!.disabled
     ).toBe(true)
     expect(container.textContent).toContain("options_msDelay:0")
     expect(container.textContent).not.toContain("options_concurrentDelay")
@@ -339,6 +354,18 @@ const mangadex = getSiteIntegrationList({
 }).integrations.find((integration) => integration.id === "mangadex")!
 
 describe("integration overrides", () => {
+  it("identifies which shared settings are overridden and which use defaults", async () => {
+    await openCard(
+      cardProps({
+        override: { retries: { image: 0 }, pathTemplate: "Custom" },
+      })
+    )
+    expect(source("site-image-retries")).toContain("options_override")
+    expect(source("site-chapter-retries")).toContain("options_globalDefault")
+    expect(source("site-path")).toContain("options_override")
+    expect(source("site-format")).toContain("options_globalDefault")
+  })
+
   it("labels and displays the stored MangaDex quality override before saving another allowed option", async () => {
     const quality = mangadex.customSettings!.find(
       (field) => field.id === "imageQuality"
@@ -394,19 +421,21 @@ describe("integration overrides", () => {
     })
     await openCard(props)
     expect(
-      container.querySelector<HTMLInputElement>("#image-concurrency")!.disabled
+      container.querySelector<HTMLInputElement>("#mangadex-image-concurrency")!
+        .disabled
     ).toBe(false)
     expect(
-      container.querySelector<HTMLInputElement>("#chapter-delay")!.disabled
+      container.querySelector<HTMLInputElement>("#mangadex-chapter-delay")!
+        .disabled
     ).toBe(false)
-    await enter("#image-concurrency", "4")
+    await enter("#mangadex-image-concurrency", "4")
     const edited = {
       imagePolicy: { concurrency: 4 },
       chapterPolicy: { delayMs: 200 },
     }
     expect(props.onChange).toHaveBeenLastCalledWith("mangadex", edited)
     await openCard({ ...props, override: edited })
-    await enter("#chapter-delay", "0")
+    await enter("#mangadex-chapter-delay", "0")
     expect(props.onChange).toHaveBeenLastCalledWith("mangadex", {
       imagePolicy: { concurrency: 4 },
       chapterPolicy: { delayMs: 0 },
@@ -485,16 +514,16 @@ describe("integration overrides", () => {
       },
     })
     await openCard(props)
-    await enter("#image-concurrency", "")
+    await enter("#site-image-concurrency", "")
     expect(props.onChange).toHaveBeenLastCalledWith("site", {
       chapterPolicy: { delayMs: 20 },
     })
-    await enter("#chapter-delay", "0")
+    await enter("#site-chapter-delay", "0")
     expect(props.onChange).toHaveBeenLastCalledWith("site", {
       imagePolicy: { concurrency: 3 },
       chapterPolicy: { delayMs: 0 },
     })
-    expect(container.querySelector("#chapter-concurrency")).toBeNull()
+    expect(container.querySelector("#site-chapter-concurrency")).toBeNull()
   })
 
   it("retains zero retries and removes only the cleared retry", async () => {
