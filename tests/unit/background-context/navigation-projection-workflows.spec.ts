@@ -133,6 +133,7 @@ function navigationHarness(retainedSession: Record<string, unknown> = {}) {
   vi.stubGlobal("fetch", fetch)
   vi.stubGlobal("chrome", {
     ...chrome,
+    permissions: { contains: async () => true },
     tabs: {
       get: getTab,
       query: queryTabs,

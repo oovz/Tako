@@ -8,7 +8,12 @@ import type { Chapter } from "@/src/types/chapter"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import { assertIntegrationEndpointRequestUrl } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
-import { fetchMangaPlusTitle, MANGAPLUS_ORIGIN, parseMangaPlusId } from "./api"
+import {
+  fetchMangaPlusTitle,
+  MANGAPLUS_API_ORIGIN,
+  MANGAPLUS_ORIGIN,
+  parseMangaPlusId,
+} from "./api"
 import type {
   MangaPlusChapter,
   MangaPlusTitle,
@@ -118,6 +123,9 @@ async function resolveMangaPlusSeriesData(
 
 const background: ServiceWorkerIntegration = {
   name: "MANGA Plus Background",
-  series: { resolveSeriesData: resolveMangaPlusSeriesData },
+  series: {
+    getCatalogOrigin: () => MANGAPLUS_API_ORIGIN,
+    resolveSeriesData: resolveMangaPlusSeriesData,
+  },
 }
 export const backgroundSiteAdapter: BackgroundSiteAdapter = { background }

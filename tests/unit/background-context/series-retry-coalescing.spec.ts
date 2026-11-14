@@ -31,6 +31,7 @@ function fixture() {
   const getTab = vi.fn(async () => structuredClone(tab))
   const query = vi.fn(async () => (tab.active ? [structuredClone(tab)] : []))
   vi.stubGlobal("chrome", {
+    permissions: { contains: async () => true },
     tabs: { get: getTab, query },
     storage: {
       session: {

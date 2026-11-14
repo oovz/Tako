@@ -28,6 +28,7 @@ describe("canonical series cache hydration", () => {
   let cache: ReturnType<typeof createTabContextCache>
   let service: TabContextStateService
   let rates: RateLimitService
+  let hasSiteAccess: boolean
   const query = vi.fn()
   const fetchNetwork = vi.fn()
 
@@ -74,6 +75,7 @@ describe("canonical series cache hydration", () => {
     session = {}
     activeId = 7
     currentUrl = url
+    hasSiteAccess = true
     setEnablementMap({})
     query
       .mockReset()
@@ -107,6 +109,7 @@ describe("canonical series cache hydration", () => {
       })
     vi.stubGlobal("fetch", fetchNetwork)
     vi.stubGlobal("chrome", {
+      permissions: { contains: async () => hasSiteAccess },
       tabs: {
         query,
         get: async (id: number) => ({
@@ -211,6 +214,31 @@ describe("canonical series cache hydration", () => {
     expect(await cache.getCurrentSeriesContext(7, 2)).toMatchObject({
       context: { mangaId: "123", seriesTitle: "Fresh series" },
     })
+  })
+
+  it("restores the site-access error from session and loads chapters after a grant and retry", async () => {
+    hasSiteAccess = false
+    await resolver().resolveTabContext(7, { windowId: 2 })
+    expect(fetchNetwork).not.toHaveBeenCalled()
+    cache.deleteCachedContext(7)
+    await resolver().resolveTabContext(7, { windowId: 2, allowCached: true })
+    expect(currentProjection()?.context).toMatchObject({
+      reason: "host_permission_required",
+      hostPermissionHostname: "comic.pixiv.net",
+      sourceUrl: url,
+    })
+
+    hasSiteAccess = true
+    await resolver().resolveTabContext(7, {
+      windowId: 2,
+      allowCached: true,
+      retryErrors: true,
+    })
+    expect(currentProjection()?.context).toMatchObject({
+      seriesTitle: "Fresh series",
+      chapters: [{ id: "101" }],
+    })
+    expect(session.seriesContextError_7).toBeUndefined()
   })
 
   it("replaces stale source-URL cache authority with the freshly fetched series", async () => {

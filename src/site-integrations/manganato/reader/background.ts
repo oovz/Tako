@@ -12,6 +12,8 @@ export function createManganatoBackgroundAdapter(
     background: {
       name: `${site.name} Background`,
       series: {
+        getCatalogOrigin: (seriesUrl) =>
+          canonicalManganatoUrl(seriesUrl, site).origin,
         async resolveSeriesData(input) {
           const url = canonicalManganatoUrl(input.seriesUrl, site)
           const seriesId = url.pathname.split("/")[2]

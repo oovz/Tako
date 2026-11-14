@@ -87,7 +87,11 @@ export function MangaTabContent({
                 )}
               </h2>
               <p aria-hidden={retrying || undefined}>
-                {t("sidepanel_retrySeriesDescription")}
+                {data.hostPermissionHostname
+                  ? t("sidepanel_seriesHostPermissionRequired", [
+                      data.hostPermissionHostname,
+                    ])
+                  : t("sidepanel_retrySeriesDescription")}
               </p>
             </div>
             <button

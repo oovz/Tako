@@ -78,6 +78,8 @@ export interface ServiceWorkerIntegration<
     pageProbeData: unknown
   }) => Promise<void>
   series?: {
+    /** Catalog origin when requests use a different host than the series URL. */
+    getCatalogOrigin?(seriesUrl: string): string
     /** Canonical provider-owned series metadata/chapter resolver. */
     resolveSeriesData(
       input: SeriesDataResolutionInput

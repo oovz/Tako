@@ -1787,6 +1787,12 @@
   "sidepanel_retrySeriesDescription": {
     "message": "もう一度シリーズ情報を読み込んでください。"
   },
+  "sidepanel_seriesHostPermissionRequired": {
+    "message": "Chrome の拡張機能設定で Tako に $HOST$ へのアクセスを許可してから、再試行してください。",
+    "placeholders": {
+      "host": { "content": "$1" }
+    }
+  },
   "sidepanel_retrySeriesContext": {
     "message": "シリーズを再読み込み"
   },

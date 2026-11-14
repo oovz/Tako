@@ -167,6 +167,7 @@ describe("canonical series state across real consumers", () => {
     setEnablementMap({ mangadex: true })
     vi.stubGlobal("crypto", webcrypto)
     vi.stubGlobal("chrome", {
+      permissions: { contains: async () => true },
       runtime: {
         id: extensionId,
         getURL: (path: string) => `chrome-extension://${extensionId}/${path}`,

@@ -1790,6 +1790,12 @@
   "sidepanel_retrySeriesDescription": {
     "message": "Try loading the series information again."
   },
+  "sidepanel_seriesHostPermissionRequired": {
+    "message": "Allow Tako to access $HOST$ in Chrome’s extension settings, then retry.",
+    "placeholders": {
+      "host": { "content": "$1" }
+    }
+  },
   "sidepanel_retrySeriesContext": {
     "message": "Retry series"
   },

@@ -6,6 +6,13 @@ import { getDefinitions, getDefinition, isEnabled } from "./catalog"
 
 export const OPTIONAL_BROAD_HTTPS_ORIGIN = "https://*/*"
 
+export class SeriesHostPermissionRequiredError extends Error {
+  constructor(readonly hostname: string) {
+    super(`Host access to ${hostname} is required to load this series`)
+    this.name = "SeriesHostPermissionRequiredError"
+  }
+}
+
 function uniqueSorted(origins: Iterable<string>): string[] {
   return [...new Set(origins)].sort()
 }

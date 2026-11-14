@@ -11,6 +11,7 @@ import {
 import { resolveSiteIntegrationSeriesData } from "@/src/runtime/resolve-site-integration-series-data"
 import { getBackgroundSiteAdapterById } from "@/src/runtime/background-site-integration-initialization"
 import { getDefinition } from "@/src/site-integrations/catalog"
+import { SeriesHostPermissionRequiredError } from "@/src/site-integrations/host-permission-service"
 import { executeApprovedPageProbe } from "@/src/site-integrations/page-probe"
 import { matchUrl } from "@/src/site-integrations/url-matcher"
 import { resolveTabUrlForSupportCheck } from "@/src/shared/tab-url-helpers"
@@ -440,9 +441,18 @@ class ProviderTabResolution {
       !(await this.deps.tabContextCache.isRequestIdCurrent(windowId, requestId))
     )
       return "completed"
+    const permissionRequired =
+      error instanceof SeriesHostPermissionRequiredError
     await initializeTabContext(
       this.deps,
-      { context: "error", error: createUserFacingResolutionError() },
+      permissionRequired
+        ? {
+            context: "error",
+            error: error.message,
+            reason: "host_permission_required",
+            hostPermissionHostname: error.hostname,
+          }
+        : { context: "error", error: createUserFacingResolutionError() },
       tabId,
       { ...this.commitRequest(), supersedeInFlight: true }
     )

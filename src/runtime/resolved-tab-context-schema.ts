@@ -4,6 +4,7 @@ import {
   ChapterArchiveMetadataShape,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
+import { TabContextErrorSchema } from "@/src/runtime/tab-state-schemas"
 
 const ResolvedChapterSchema = z.strictObject({
   ...ChapterArchiveMetadataShape,
@@ -58,8 +59,7 @@ export const ResolvedTabContextSchema = z.discriminatedUnion("context", [
   z.strictObject({
     context: z.literal("unsupported"),
   }),
-  z.strictObject({
+  TabContextErrorSchema.omit({ sourceUrl: true }).extend({
     context: z.literal("error"),
-    error: z.string().min(1),
   }),
 ])

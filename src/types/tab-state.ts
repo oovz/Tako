@@ -50,6 +50,8 @@ export interface LoadingTabContext {
 
 export interface TabContextError {
   error: string
+  reason?: "host_permission_required"
+  hostPermissionHostname?: string
   sourceUrl?: string
 }
 

@@ -5,6 +5,7 @@
  */
 
 import http from "node:http"
+import https from "node:https"
 import { randomInt } from "node:crypto"
 import { redactDiagnostic } from "../../../src/runtime/diagnostic-redaction"
 import type { AddressInfo } from "node:net"
@@ -90,7 +91,11 @@ async function readRequestBody(req: http.IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
+export async function startLocalMockServer(productionOrigins?: {
+  tls: https.ServerOptions
+  routePrefixes: Readonly<Record<string, string>>
+  onRequest: (request: http.IncomingMessage) => void
+}): Promise<LocalMockServerHandle> {
   const routes = new Map<string, MockRouteHandler>()
 
   /**
@@ -121,7 +126,7 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
     }
   }
 
-  const server = http.createServer(async (req, res) => {
+  const handleRequest: http.RequestListener = async (req, res) => {
     const requestOrigin = Array.isArray(req.headers.origin)
       ? req.headers.origin[0]
       : req.headers.origin
@@ -129,10 +134,17 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
     const requestedHeaders = Array.isArray(requestedHeadersRaw)
       ? requestedHeadersRaw.join(", ")
       : requestedHeadersRaw
-    const corsHeaders = buildCorsHeaders(requestOrigin, requestedHeaders)
+    const corsHeaders = productionOrigins
+      ? {}
+      : buildCorsHeaders(requestOrigin, requestedHeaders)
 
     try {
-      const url = new URL(req.url ?? "/", "http://127.0.0.1")
+      productionOrigins?.onRequest(req)
+      const host = req.headers.host ?? ""
+      const url = new URL(
+        req.url ?? "/",
+        productionOrigins ? `https://${host}` : "http://127.0.0.1"
+      )
 
       if (process.env.TMD_TEST_E2E_DIAG === "true") {
         console.log(
@@ -152,7 +164,9 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
         return
       }
 
-      const match = pickHandler(routes, url.pathname)
+      const prefix = productionOrigins?.routePrefixes[host]
+      const fixturePath = prefix ? `${prefix}${url.pathname}` : url.pathname
+      const match = pickHandler(routes, fixturePath)
       if (!match) {
         res.writeHead(404, {
           "content-type": "text/plain; charset=utf-8",
@@ -166,7 +180,7 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
       const result = await match.handler({
         method: req.method ?? "GET",
         url,
-        pathnameAfterPrefix: url.pathname.slice(match.prefix.length) || "/",
+        pathnameAfterPrefix: fixturePath.slice(match.prefix.length) || "/",
         body,
         headers: req.headers,
       })
@@ -203,7 +217,10 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
       }
       res.end(`Server error: ${message}`)
     }
-  })
+  }
+  const server = productionOrigins
+    ? https.createServer(productionOrigins.tls, handleRequest)
+    : http.createServer(handleRequest)
 
   // Bind the final socket above browser-restricted ports. Keeping it open
   // avoids port-claim races between parallel workers.
@@ -243,7 +260,7 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
   let closed = false
   return {
     port: addressInfo.port,
-    url: `http://127.0.0.1:${addressInfo.port}`,
+    url: `${productionOrigins ? "https" : "http"}://127.0.0.1:${addressInfo.port}`,
     addRoute(prefix, handler) {
       if (!prefix.startsWith("/")) {
         throw new Error(

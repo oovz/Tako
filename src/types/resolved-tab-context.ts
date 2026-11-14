@@ -1,6 +1,6 @@
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 import type { ChapterArchiveMetadata } from "@/src/types/chapter"
-import type { VolumeState } from "@/src/types/tab-state"
+import type { TabContextError, VolumeState } from "@/src/types/tab-state"
 
 export interface ResolvedTabReadyContext {
   context: "ready"
@@ -32,9 +32,11 @@ export interface ResolvedTabUnsupportedContext {
   context: "unsupported"
 }
 
-export interface ResolvedTabErrorContext {
+export interface ResolvedTabErrorContext extends Omit<
+  TabContextError,
+  "sourceUrl"
+> {
   context: "error"
-  error: string
 }
 
 export type ResolvedTabContext =

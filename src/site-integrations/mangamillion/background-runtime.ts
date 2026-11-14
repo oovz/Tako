@@ -15,6 +15,7 @@ import type {
 } from "./contracts/api"
 import { fetchChapterList, fetchTitleDetail } from "./api"
 import {
+  MANGAMILLION_API_ORIGIN,
   MANGAMILLION_ORIGIN,
   buildMangaMillionChapterUrl,
   parseMangaMillionSeriesUrl,
@@ -197,6 +198,7 @@ async function resolveMangaMillionSeriesData(
 const background: ServiceWorkerIntegration = {
   name: "MangaMillion Background",
   series: {
+    getCatalogOrigin: () => MANGAMILLION_API_ORIGIN,
     resolveSeriesData: resolveMangaMillionSeriesData,
   },
 }

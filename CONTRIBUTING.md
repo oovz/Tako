@@ -49,7 +49,7 @@ Run `pnpm test:coverage` to measure unit and integration coverage with Vitest V8
 
 Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
-Browser tests run headlessly in bundled Chromium, create disposable profiles, and build their own test extension. Install Chromium before running them:
+Browser tests run headlessly in bundled Chromium with disposable profiles. The host-access check loads the production build and uses OpenSSL to serve local HTTPS fixtures on the original provider hostnames. Install Chromium and ensure `openssl` is on your `PATH` before running the suite.
 
 ```sh
 pnpm exec playwright install --no-shell chromium
@@ -63,7 +63,7 @@ Use `pnpm test:e2e:headed` to run the same tests with a visible browser.
 Run a failing spec with diagnostics to collect browser and extension logs:
 
 ```sh
-pnpm test:e2e:diag -- tests/e2e/mangadex-sidepanel-navigation.spec.ts
+pnpm test:e2e:diag tests/e2e/mangadex-sidepanel-navigation.spec.ts
 ```
 
 For live tests, set `TMD_TEST_E2E_DIAG=true`. Diagnostics redact sensitive fields, but can still contain browsing context and free text. Review logs and attachments before sharing them.

@@ -1790,6 +1790,12 @@
   "sidepanel_retrySeriesDescription": {
     "message": "작품 정보를 다시 불러와 보세요."
   },
+  "sidepanel_seriesHostPermissionRequired": {
+    "message": "Chrome 확장 프로그램 설정에서 Tako에 $HOST$ 액세스 권한을 허용한 다음 다시 시도하세요.",
+    "placeholders": {
+      "host": { "content": "$1" }
+    }
+  },
   "sidepanel_retrySeriesContext": {
     "message": "작품 다시 불러오기"
   },

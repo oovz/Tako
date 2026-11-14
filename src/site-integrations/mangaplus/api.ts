@@ -7,6 +7,7 @@ import { decodeMangaPlusTitle, decodeMangaPlusViewer } from "./proto"
 
 const sessionToken = crypto.randomUUID()
 export const MANGAPLUS_ORIGIN = "https://mangaplus.shueisha.co.jp"
+export const MANGAPLUS_API_ORIGIN = "https://jumpg-webapi.tokyo-cdn.com"
 
 export function parseMangaPlusId(
   url: string,
@@ -42,7 +43,7 @@ async function request(
     endpointId: "mangaplus-api",
     scope: "chapter",
     rateLimitService,
-    url: `https://jumpg-webapi.tokyo-cdn.com/api/${path}`,
+    url: `${MANGAPLUS_API_ORIGIN}/api/${path}`,
     init: {
       credentials: "include",
       headers: { "SESSION-TOKEN": sessionToken },

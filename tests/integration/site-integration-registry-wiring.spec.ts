@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { siteIntegrationCatalog } from "@/src/runtime/generated/site-integration-catalog"
 import { getBackgroundSiteAdapterById } from "@/src/runtime/background-site-integration-initialization"
 import { initializeSiteIntegrationEnablement } from "@/src/runtime/site-integration-initialization"
+import { resolveSiteIntegrationSeriesData } from "@/src/runtime/resolve-site-integration-series-data"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 
@@ -67,10 +68,15 @@ const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
 await initializeSiteIntegrationEnablement(async () => ({ mangadex: true }))
 
 describe("site integration registry", () => {
+  const contains = vi.fn(
+    async (_permissions: chrome.permissions.Permissions) => true
+  )
   beforeEach(() => {
     vi.clearAllMocks()
-    global.fetch = vi.fn()
+    vi.stubGlobal("chrome", { permissions: { contains } })
+    vi.stubGlobal("fetch", vi.fn())
   })
+  afterEach(() => vi.unstubAllGlobals())
 
   describe.each(enabledDefinitions)("$id", (definition) => {
     it("registers a named series resolver", async () => {
@@ -82,8 +88,7 @@ describe("site integration registry", () => {
       )
     })
 
-    it("reports HTTP failures during series resolution", async () => {
-      const adapter = await getBackgroundSiteAdapterById(definition.id)
+    it("checks the catalog host before fetching and reports HTTP failures", async () => {
       vi.mocked(global.fetch).mockImplementation(async (url) => {
         const response = new Response(null, {
           status: 503,
@@ -99,7 +104,8 @@ describe("site integration registry", () => {
         `${definition.id} needs a valid public series route`
       ).toBeDefined()
 
-      const outcome = await adapter!.background.series!.resolveSeriesData!({
+      const outcome = await resolveSiteIntegrationSeriesData({
+        siteIntegrationId: definition.id,
         seriesUrl,
         rateLimitService,
         siteIntegrationSettingsReader,
@@ -112,6 +118,16 @@ describe("site integration registry", () => {
         global.fetch,
         `${definition.id} must reach the network boundary`
       ).toHaveBeenCalled()
+      const requestedHosts = new Set(
+        vi
+          .mocked(global.fetch)
+          .mock.calls.map(([url]) => `${new URL(String(url)).origin}/*`)
+      )
+      expect(contains).toHaveBeenCalledOnce()
+      expect(contains).toHaveBeenCalledBefore(vi.mocked(global.fetch))
+      const [catalogHost] = contains.mock.calls[0][0].origins ?? []
+      expect(requestedHosts).toEqual(new Set([catalogHost]))
+      expect(definition.requiredOrigins).toContain(catalogHost)
       if (outcome.resolved) {
         const errors = [
           outcome.value.metadataError,

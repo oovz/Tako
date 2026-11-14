@@ -43,6 +43,7 @@ export interface SidepanelSeriesContextData {
   historyReadStatus?: StorageReadStatus
   retryHistory?: () => void
   retrySeriesContext?: () => void
+  hostPermissionHostname?: string
 }
 
 export async function resolveCurrentSidepanelWindowId(): Promise<
@@ -213,6 +214,10 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     downloadedChapters,
     historyReadStatus: history.status,
     retryHistory: history.retry,
+    hostPermissionHostname:
+      activeTabContext.kind === "error"
+        ? activeTabContext.hostPermissionHostname
+        : undefined,
     retrySeriesContext:
       !isLoading && activeTabContext.kind === "error"
         ? retrySeriesContext

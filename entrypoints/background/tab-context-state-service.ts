@@ -88,6 +88,10 @@ export class TabContextStateService {
       const sourceUrl = options?.expectedUrl
       const errorContext = {
         error: typedPayload.error,
+        ...(typedPayload.reason ? { reason: typedPayload.reason } : {}),
+        ...(typedPayload.hostPermissionHostname
+          ? { hostPermissionHostname: typedPayload.hostPermissionHostname }
+          : {}),
         ...(sourceUrl ? { sourceUrl } : {}),
       }
       const applied = await this.projection.commitTabContextMutation(
@@ -96,7 +100,10 @@ export class TabContextStateService {
         async () => {
           await chrome.storage.session.remove(tabStateKey)
           await chrome.storage.session.set({
-            [errorKey]: sourceUrl ? errorContext : typedPayload.error,
+            [errorKey]:
+              sourceUrl || typedPayload.reason
+                ? errorContext
+                : typedPayload.error,
           })
           return errorContext
         }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   getBackgroundSiteAdapterById: vi.fn(),
@@ -27,12 +27,18 @@ const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
 }
 
 describe("resolveSiteIntegrationSeriesData", () => {
+  const contains = vi.fn(
+    async (_permissions: chrome.permissions.Permissions) => true
+  )
+
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal("chrome", { permissions: { contains } })
     mocks.getBackgroundSiteAdapterById.mockResolvedValue({
       background: { series: { resolveSeriesData: mocks.resolveSeriesData } },
     })
   })
+  afterEach(() => vi.unstubAllGlobals())
 
   it("delegates the canonical resolver with the complete current input", async () => {
     const controller = new AbortController()
@@ -74,6 +80,31 @@ describe("resolveSiteIntegrationSeriesData", () => {
         siteIntegrationSettingsReader,
       })
     ).rejects.toThrow("requires a seriesUrl or seriesId")
+    expect(mocks.resolveSeriesData).not.toHaveBeenCalled()
+  })
+
+  it("reports the API host when the reading page has access but the catalog host does not", async () => {
+    mocks.getBackgroundSiteAdapterById.mockResolvedValue({
+      background: {
+        series: {
+          getCatalogOrigin: () => "https://api.example.test",
+          resolveSeriesData: mocks.resolveSeriesData,
+        },
+      },
+    })
+    contains.mockResolvedValueOnce(false)
+
+    await expect(
+      resolveSiteIntegrationSeriesData({
+        siteIntegrationId: "custom-site",
+        seriesUrl: "https://example.test/series/1",
+        rateLimitService,
+        siteIntegrationSettingsReader,
+      })
+    ).rejects.toMatchObject({ hostname: "api.example.test" })
+    expect(contains).toHaveBeenCalledWith({
+      origins: ["https://api.example.test/*"],
+    })
     expect(mocks.resolveSeriesData).not.toHaveBeenCalled()
   })
 

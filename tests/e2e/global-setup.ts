@@ -17,7 +17,7 @@ export default async function globalSetup(_config: FullConfig) {
   )
   const buildCommand = isLiveTest
     ? "pnpm generate:site-integrations && pnpm exec wxt build --mode live-test"
-    : "pnpm generate:site-integrations && pnpm exec wxt build --mode e2e-test"
+    : "pnpm build && pnpm exec wxt build --mode e2e-test"
 
   if (!skipBuild) {
     rmSync(buildDir, { recursive: true, force: true })
@@ -47,5 +47,12 @@ export default async function globalSetup(_config: FullConfig) {
 
   if (!existsSync(buildDir)) {
     throw new Error(`Build output not found at ${buildDir}`)
+  }
+  const productionManifest = path.resolve(
+    __dirname,
+    "../../.output/chrome-mv3/manifest.json"
+  )
+  if (!isLiveTest && !existsSync(productionManifest)) {
+    throw new Error(`Production manifest not found at ${productionManifest}`)
   }
 }

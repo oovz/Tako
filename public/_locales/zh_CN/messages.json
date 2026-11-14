@@ -1787,6 +1787,12 @@
   "sidepanel_retrySeriesDescription": {
     "message": "请重新加载漫画信息。"
   },
+  "sidepanel_seriesHostPermissionRequired": {
+    "message": "请在 Chrome 的扩展程序设置中允许 Tako 访问 $HOST$，然后重试。",
+    "placeholders": {
+      "host": { "content": "$1" }
+    }
+  },
   "sidepanel_retrySeriesContext": {
     "message": "重试加载漫画"
   },

@@ -7,6 +7,7 @@ import { preparePixivDispatchContext } from "./background-context"
 import type { PixivDispatchContext } from "./contracts/dispatch-context"
 import { fetchPixivChapterList, fetchPixivSeriesMetadata } from "./series-api"
 import { parseWorkIdFromUrl } from "./page-context"
+import { PIXIV_BASE_URL } from "./shared"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function resolvePixivSeriesDataError(reason: unknown): string {
@@ -63,6 +64,7 @@ function resolvePixivSeriesPart<T>(result: PromiseSettledResult<T>): {
 const background: ServiceWorkerIntegration<PixivDispatchContext> = {
   name: "Pixiv Comic Background",
   series: {
+    getCatalogOrigin: () => PIXIV_BASE_URL,
     resolveSeriesData: resolvePixivSeriesData,
   },
   prepareDispatchContext: (input) =>

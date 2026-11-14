@@ -8,7 +8,11 @@ import {
   parseActiveTabContextByWindow,
   TabContextErrorSchema,
 } from "@/src/runtime/tab-state-schemas"
-import type { MangaPageState, WindowTabContext } from "@/src/types/tab-state"
+import type {
+  MangaPageState,
+  TabContextError,
+  WindowTabContext,
+} from "@/src/types/tab-state"
 
 export interface DerivedSidepanelSeriesContextData {
   mangaState?: MangaPageState
@@ -26,7 +30,7 @@ export interface DerivedSidepanelSeriesContextData {
 
 export type ActiveTabContextValue =
   | { kind: "ready"; mangaState: MangaPageState; revision?: number }
-  | { kind: "error"; error: string; sourceUrl?: string }
+  | ({ kind: "error" } & TabContextError)
   | { kind: "loading"; sourceUrl?: string }
   | { kind: "unsupported" }
 

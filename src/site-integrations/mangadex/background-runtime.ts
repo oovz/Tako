@@ -9,7 +9,7 @@ import {
   fetchMangadexChapterList,
   fetchMangadexSeriesMetadata,
 } from "./series-api"
-import { parseUuidFromPath } from "./api"
+import { MANGADEX_API_BASE, parseUuidFromPath } from "./api"
 import { parseMangadexPagePreferences } from "./preferences"
 import {
   MANGADEX_PREFERENCES_BY_SERIES_SESSION_KEY,
@@ -140,6 +140,7 @@ const background: ServiceWorkerIntegration<MangadexDispatchContext> = {
     })
   },
   series: {
+    getCatalogOrigin: () => MANGADEX_API_BASE,
     resolveSeriesData: resolveMangadexSeriesData,
   },
   async prepareDispatchContext(

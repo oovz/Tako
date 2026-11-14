@@ -4,6 +4,7 @@ import type {
   SiteIntegrationSettingsReader,
 } from "@/src/types/site-integrations"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { SeriesHostPermissionRequiredError } from "@/src/site-integrations/host-permission-service"
 
 export interface ResolveSiteIntegrationSeriesDataInput {
   siteIntegrationId: string
@@ -21,7 +22,7 @@ export interface ResolveSiteIntegrationSeriesDataInput {
   onPartial?: (partial: SeriesDataResolutionResult) => void | Promise<void>
 }
 
-/** Canonical background resolver shared by runtime messages and tab discovery. */
+/** Resolve series data using the provider's current catalog host grant. */
 export async function resolveSiteIntegrationSeriesData(
   input: ResolveSiteIntegrationSeriesDataInput
 ): Promise<SeriesDataResolutionResult> {
@@ -37,6 +38,19 @@ export async function resolveSiteIntegrationSeriesData(
 
   if (!input.seriesUrl && !input.seriesId) {
     throw new Error("Series resolution requires a seriesUrl or seriesId")
+  }
+  const catalogAddress =
+    series.getCatalogOrigin?.(input.seriesUrl ?? "") ?? input.seriesUrl
+  if (catalogAddress) {
+    const catalogUrl = new URL(catalogAddress)
+    input.signal?.throwIfAborted()
+    const hasAccess = await chrome.permissions.contains({
+      origins: [`${catalogUrl.protocol}//${catalogUrl.hostname}/*`],
+    })
+    input.signal?.throwIfAborted()
+    if (!hasAccess) {
+      throw new SeriesHostPermissionRequiredError(catalogUrl.hostname)
+    }
   }
   return series.resolveSeriesData({
     seriesUrl: input.seriesUrl ?? "",
