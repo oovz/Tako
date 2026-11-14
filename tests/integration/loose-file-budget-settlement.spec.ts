@@ -26,10 +26,7 @@ import { HistoryRepository } from "@/src/storage/history-repository"
 import { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import { QueueRepository } from "@/src/storage/queue-repository"
-import {
-  buildMangaMillionRegisterResponse,
-  buildMangaMillionViewerResponse,
-} from "@/tests/e2e/fixtures/mock-data/site-integrations/mangamillion/api-fixtures"
+import { buildMangaMillionViewerResponse } from "@/tests/e2e/fixtures/mock-data/site-integrations/mangamillion/api-fixtures"
 
 // Scale image budgets; the actual metadata cap, transport and writes run intact.
 vi.mock("@/src/constants/timeouts", async (importOriginal) => ({
@@ -112,6 +109,8 @@ async function runChapter(
   const sendMessage = async (message: RuntimeMessage): Promise<unknown> => {
     let response: unknown
     switch (message.type) {
+      case "GET_MANGAMILLION_DEVICE_TOKEN":
+        return { success: true, deviceToken: "test-token" }
       case "GET_SITE_INTEGRATION_ENABLEMENT":
         return { success: true, enablement: { mangamillion: true } }
       case "OFFSCREEN_JOB_ACCEPTED":
@@ -322,12 +321,6 @@ async function runChapter(
     "fetch",
     vi.fn(async (url: string) => {
       const pathname = new URL(url).pathname
-      if (pathname.endsWith("/api/register")) {
-        return new Response(
-          new Uint8Array(buildMangaMillionRegisterResponse()).buffer,
-          { headers: { "content-type": "application/octet-stream" } }
-        )
-      }
       if (pathname.endsWith("/api/viewer")) {
         return new Response(
           new Uint8Array(

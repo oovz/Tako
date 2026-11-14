@@ -78,18 +78,18 @@ async function resolvePlus() {
   })
 }
 function installMillionViewer(viewer: Uint8Array) {
+  vi.stubGlobal("chrome", {
+    runtime: {
+      sendMessage: async () => ({ success: true, deviceToken: "test-token" }),
+    },
+  })
   return vi
     .spyOn(integrationHttpClient, "request")
-    .mockImplementation(async (input) => {
-      if (input.url.endsWith("/register"))
-        return response(
-          message(170, new BinaryWriter().tag(1, 2).string("token").finish())
-        )
-      return response(message(70, viewer))
-    })
+    .mockResolvedValue(response(message(70, viewer)))
 }
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   rateLimitService.cleanupRateLimiters()
 })
 

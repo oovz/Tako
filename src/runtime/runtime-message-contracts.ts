@@ -422,6 +422,24 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["offscreen"],
     readiness: "control-ready",
   }),
+  GET_MANGAMILLION_DEVICE_TOKEN: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("GET_MANGAMILLION_DEVICE_TOKEN"),
+      rejectedToken: z.string().min(1).max(4096).optional(),
+    }),
+    response: z.union([
+      z.strictObject({
+        success: z.literal(true),
+        deviceToken: z.string().min(1).max(4096),
+      }),
+      RuntimeFailureSchema.extend({ status: z.literal(403).optional() }),
+    ]),
+    target: "background",
+    kind: "query",
+    allowedSenders: ["offscreen"],
+    readiness: "integrations-ready",
+  }),
   GET_OPTIONS_DOWNLOAD_STATE: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),

@@ -11,6 +11,8 @@ import type {
   MangaMillionResponse,
 } from "./contracts/api"
 import { MANGAMILLION_API_ORIGIN } from "./urls"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { SiteRequestDeniedError } from "@/src/site-integrations/site-request-denied-error"
 
 let cachedDeviceToken: string | null = null
 type DeviceTokenRegistration = {
@@ -187,11 +189,13 @@ function waitForDeviceToken(
 
 export async function getDeviceToken(
   rateLimitService: RateLimitService,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  rejectedToken?: string
 ): Promise<string> {
   if (signal?.aborted) {
     throw getAbortReason(signal)
   }
+  if (cachedDeviceToken === rejectedToken) cachedDeviceToken = null
   if (cachedDeviceToken) {
     return cachedDeviceToken
   }
@@ -205,13 +209,33 @@ export async function getDeviceToken(
   return waitForDeviceToken(registration, signal)
 }
 
+async function getBackgroundDeviceToken(
+  signal?: AbortSignal,
+  rejectedToken?: string
+): Promise<string> {
+  signal?.throwIfAborted()
+  const response = await sendRuntimeMessage({
+    target: "background",
+    type: "GET_MANGAMILLION_DEVICE_TOKEN",
+    ...(rejectedToken ? { rejectedToken } : {}),
+  })
+  signal?.throwIfAborted()
+  if (!response.success) {
+    if (response.status === 403) throw new SiteRequestDeniedError()
+    throw new ProviderContractError(response.error)
+  }
+  return response.deviceToken
+}
+
 async function requestMangaMillionApi(
   path: string,
   parameters: Record<string, string>,
   rateLimitService: RateLimitService,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  getToken = (rejectedToken?: string) =>
+    getDeviceToken(rateLimitService, signal, rejectedToken)
 ): Promise<ArrayBuffer> {
-  const token = await getDeviceToken(rateLimitService, signal)
+  const token = await getToken()
   const searchParams = new URLSearchParams(parameters)
   const url = `${MANGAMILLION_API_ORIGIN}${path}?${searchParams.toString()}`
 
@@ -234,10 +258,7 @@ async function requestMangaMillionApi(
   if (response.status === 401 || response.status === 422) {
     // Token might be invalid or expired; try re-registering once
     cancelResponseBody(response, `MangaMillion API ${path} token refresh`)
-    if (cachedDeviceToken === token) {
-      cachedDeviceToken = null
-    }
-    const freshToken = await getDeviceToken(rateLimitService, signal)
+    const freshToken = await getToken(token)
     const retryResponse = await integrationHttpClient.request({
       integrationId: "mangamillion",
       endpointId: "mangamillion-api",
@@ -359,7 +380,8 @@ export async function fetchViewer(
       avif_enable: "false",
     },
     rateLimitService,
-    signal
+    signal,
+    (rejectedToken) => getBackgroundDeviceToken(signal, rejectedToken)
   )
 
   const decoded = decodeSuccessfulResponse(buffer, "MangaMillion viewer error")

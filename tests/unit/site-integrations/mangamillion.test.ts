@@ -102,6 +102,7 @@ async function loadFreshMangaMillionModules() {
 describe("MangaMillion site integration", () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   describe("URL matching and parsing", () => {
@@ -752,16 +753,20 @@ describe("MangaMillion site integration", () => {
         ...encodeMessage(70, viewerBytes),
       ])
 
-      vi.spyOn(httpClient, "request").mockImplementation(async (opts) => {
-        if (opts.url.endsWith("/api/register")) {
-          return makeDeviceTokenResponse()
-        }
-        return {
-          ok: true,
-          status: 200,
-          arrayBuffer: async () => viewerBuf.buffer,
-        } as unknown as Response
-      })
+      const sendMessage = vi.fn(async () => ({
+        success: true,
+        deviceToken: "test-token",
+      }))
+      vi.stubGlobal("chrome", { runtime: { sendMessage } })
+      const request = vi
+        .spyOn(httpClient, "request")
+        .mockImplementation(async () => {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => viewerBuf.buffer,
+          } as unknown as Response
+        })
 
       const plan =
         await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
@@ -785,6 +790,14 @@ describe("MangaMillion site integration", () => {
       expect(plan.imageUrls[0]).toContain(
         "&iv=4af66d450c1244868dc4a5cff035898c"
       )
+      expect(sendMessage).toHaveBeenCalledWith({
+        target: "background",
+        type: "GET_MANGAMILLION_DEVICE_TOKEN",
+      })
+      expect(request).toHaveBeenCalledOnce()
+      expect(request.mock.calls[0][0].init?.headers).toEqual({
+        "Access-Token": "test-token",
+      })
     })
 
     it("downloads and decrypts chapter image", async () => {

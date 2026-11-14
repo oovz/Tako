@@ -6,6 +6,7 @@ import {
 } from "./fixtures/state-helpers"
 import { MANGAMILLION_BASE_URL } from "./fixtures/test-domains-constants"
 import { MangaMillion } from "./fixtures/mock-data"
+import { MANGAMILLION_LOCAL_API_PREFIX } from "./fixtures/mock-data/site-integrations/mangamillion/local-server"
 import {
   assertTaskSucceeded,
   openOptionsPage,
@@ -87,11 +88,24 @@ test.describe("MangaMillion downloads", () => {
     }
   })
 
-  test("downloads and settles an artifact in browser mode", async ({
+  test("downloads with the catalog device token when a second registration is denied", async ({
     context,
     extensionId,
     page,
+    _extensionContextState,
   }) => {
+    const mockServer = _extensionContextState.localMockServer!
+    let registrations = 0
+    mockServer.addRoute(`${MANGAMILLION_LOCAL_API_PREFIX}/api/register`, () => {
+      registrations += 1
+      return registrations === 1
+        ? {
+            status: 200,
+            headers: { "content-type": "application/octet-stream" },
+            body: MangaMillion.buildMangaMillionRegisterResponse(),
+          }
+        : { status: 403, body: "Forbidden" }
+    })
     const series = MangaMillion.BASIC_SERIES.series
     const seriesUrl = `${MANGAMILLION_BASE_URL}/en/title/${series.seriesId}`
 
@@ -146,6 +160,7 @@ test.describe("MangaMillion downloads", () => {
         task.lastSuccessfulDownloadId!
       )
       expect(artifact.fileSize).toBeGreaterThan(0)
+      expect(registrations).toBe(1)
     } finally {
       await optionsPage.close()
     }

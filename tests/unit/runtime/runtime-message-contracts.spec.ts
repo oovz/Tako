@@ -29,6 +29,8 @@ const EXPECTED_RUNTIME_MESSAGES = {
   REQUEST_TAB_CONTEXT_REFRESH:
     "background|command|sidepanel|integrations-ready",
   GET_SITE_INTEGRATION_ENABLEMENT: "background|query|offscreen|control-ready",
+  GET_MANGAMILLION_DEVICE_TOKEN:
+    "background|query|offscreen|integrations-ready",
   GET_OPTIONS_DOWNLOAD_STATE: "background|query|options|runtime-ready",
   GET_OPTIONS_CONFIGURATION: "background|query|options|runtime-ready",
   GET_SIDEPANEL_DOWNLOAD_STATE: "background|query|sidepanel|runtime-ready",
@@ -81,7 +83,6 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(41)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {

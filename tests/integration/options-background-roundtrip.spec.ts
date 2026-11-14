@@ -57,6 +57,9 @@ function createHarness() {
     collectUnusedHandles: async () => undefined,
   })
   const handlers = createBackgroundRuntimeMessageHandlers({
+    get rateLimitService() {
+      return outsideOptionsScope()
+    },
     settingsRepository: settings,
     historyRepository: history,
     optionsConfigurationService: service,

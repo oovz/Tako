@@ -254,6 +254,7 @@ const queueApplicationCommands = new QueueApplicationCommands({
 })
 
 const backgroundRuntimeHandlers = createBackgroundRuntimeMessageHandlers({
+  rateLimitService,
   coverPreviewHandlers: createBackgroundCoverPreviewMessageHandlers({
     ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
     getCurrentSeriesContext:

@@ -19,10 +19,7 @@ import { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import * as fsAccess from "@/src/storage/fs-access"
-import {
-  buildMangaMillionRegisterResponse,
-  buildMangaMillionViewerResponse,
-} from "@/tests/e2e/fixtures/mock-data/site-integrations/mangamillion/api-fixtures"
+import { buildMangaMillionViewerResponse } from "@/tests/e2e/fixtures/mock-data/site-integrations/mangamillion/api-fixtures"
 import { MOCK_PLAIN_WEBP_BUFFER } from "@/tests/e2e/fixtures/mock-data/site-integrations/mangamillion/image-fixtures"
 
 type OffscreenDownloadChapterPayload =
@@ -246,6 +243,9 @@ const sendMessage = vi.fn(async (message: OffscreenMessage) => {
     }
   }
 
+  if (message.type === "GET_MANGAMILLION_DEVICE_TOKEN") {
+    return { success: true, deviceToken: "test-token" }
+  }
   if (message.type === "GET_SITE_INTEGRATION_ENABLEMENT") {
     return { success: true, enablement: { mangamillion: true } }
   }
@@ -464,12 +464,6 @@ describe("cover prefetch and chapter processing", () => {
       let coverCanceled = false
       const fetchMock = vi.fn(async (url: string) => {
         const pathname = new URL(url).pathname
-        if (pathname.endsWith("/api/register")) {
-          return new Response(
-            toArrayBuffer(buildMangaMillionRegisterResponse()),
-            { headers: { "content-type": "application/octet-stream" } }
-          )
-        }
         if (pathname.endsWith("/api/viewer")) {
           return new Response(
             toArrayBuffer(
