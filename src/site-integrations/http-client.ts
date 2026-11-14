@@ -15,6 +15,7 @@ import {
 } from "./request-policy"
 import type { SiteIntegrationResponseType } from "./definition-types"
 import { ResponseBodyLimitError } from "@/src/shared/html-response-decoder"
+import { SiteRequestDeniedError } from "./site-request-denied-error"
 
 export type IntegrationHttpRequest = {
   integrationId: string
@@ -169,6 +170,9 @@ export const integrationHttpClient = {
             requestUrl.href,
             response.url
           )
+        }
+        if (response.status === 403) {
+          throw new SiteRequestDeniedError()
         }
         return limitResponseBody(response, endpoint.maxResponseBytes)
       } catch (error) {

@@ -414,6 +414,9 @@
   "downloadError_providerRateLimited": {
     "message": "该站点正在限制请求，请稍后重试。"
   },
+  "downloadError_providerAccessDenied": {
+    "message": "网站拒绝了访问。请确认能在网站上打开该章节，然后重试。"
+  },
   "downloadError_providerChanged": {
     "message": "该站点可能已发生变化。"
   },
@@ -1786,6 +1789,9 @@
   },
   "sidepanel_retrySeriesDescription": {
     "message": "请重新加载漫画信息。"
+  },
+  "sidepanel_seriesAccessDenied": {
+    "message": "网站拒绝了访问。请确认能在网站上打开该漫画，然后重试。"
   },
   "sidepanel_seriesHostPermissionRequired": {
     "message": "请在 Chrome 的扩展程序设置中允许 Tako 访问 $HOST$，然后重试。",

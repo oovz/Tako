@@ -91,7 +91,11 @@ export function MangaTabContent({
                   ? t("sidepanel_seriesHostPermissionRequired", [
                       data.hostPermissionHostname,
                     ])
-                  : t("sidepanel_retrySeriesDescription")}
+                  : t(
+                      data.seriesErrorReason === "provider_access_denied"
+                        ? "sidepanel_seriesAccessDenied"
+                        : "sidepanel_retrySeriesDescription"
+                    )}
               </p>
             </div>
             <button

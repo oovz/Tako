@@ -7,6 +7,7 @@ import { t } from "@/src/runtime/i18n"
 const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   network_unavailable: "downloadError_networkUnavailable",
   provider_rate_limited: "downloadError_providerRateLimited",
+  provider_access_denied: "downloadError_providerAccessDenied",
   provider_changed: "downloadError_providerChanged",
   chapter_unavailable: "downloadError_chapterUnavailable",
   folder_permission_required: "downloadError_folderPermissionRequired",

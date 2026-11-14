@@ -20,6 +20,7 @@ import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
 import logger from "@/src/runtime/logger"
 import type { MangadexDispatchContext } from "./contracts/dispatch-context"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+import { SiteRequestDeniedError } from "../site-request-denied-error"
 
 const pageProbePreferenceWrites = new StorageMutationQueue()
 
@@ -85,6 +86,14 @@ async function resolveMangadexSeriesData(
     ])
   if (partialDeliveryOutcome.status === "rejected") {
     throw partialDeliveryOutcome.reason
+  }
+  for (const outcome of [metadataOutcome, chapterListOutcome]) {
+    if (
+      outcome.status === "rejected" &&
+      outcome.reason instanceof SiteRequestDeniedError
+    ) {
+      throw outcome.reason
+    }
   }
 
   return {

@@ -73,6 +73,7 @@ export const DownloadProgressStatusSchema = z.enum(DOWNLOAD_PROGRESS_STATUSES)
 export const DOWNLOAD_ERROR_CATEGORIES = [
   "network_unavailable",
   "provider_rate_limited",
+  "provider_access_denied",
   "provider_changed",
   "chapter_unavailable",
   "folder_permission_required",

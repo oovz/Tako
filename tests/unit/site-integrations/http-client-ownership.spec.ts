@@ -15,6 +15,20 @@ const request = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe("HTTP response ownership", () => {
+  it("releases a denied response and reports the HTTP status as site access denied", async () => {
+    const response = new Response("Forbidden", { status: 403 })
+    const cancel = vi.spyOn(response.body!, "cancel")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response)
+    )
+
+    await expect(integrationHttpClient.request(request)).rejects.toMatchObject({
+      status: 403,
+      category: "provider_access_denied",
+    })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
   it.each<{ headers: Record<string, string>; finalUrl: string; error: string }>(
     [
       {

@@ -19,6 +19,7 @@ describe("download error presentation", () => {
   it.each([
     ["network_unavailable", "downloadError_networkUnavailable"],
     ["provider_rate_limited", "downloadError_providerRateLimited"],
+    ["provider_access_denied", "downloadError_providerAccessDenied"],
     ["provider_changed", "downloadError_providerChanged"],
     ["chapter_unavailable", "downloadError_chapterUnavailable"],
     ["folder_permission_required", "downloadError_folderPermissionRequired"],

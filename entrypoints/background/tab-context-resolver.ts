@@ -12,6 +12,7 @@ import { resolveSiteIntegrationSeriesData } from "@/src/runtime/resolve-site-int
 import { getBackgroundSiteAdapterById } from "@/src/runtime/background-site-integration-initialization"
 import { getDefinition } from "@/src/site-integrations/catalog"
 import { SeriesHostPermissionRequiredError } from "@/src/site-integrations/host-permission-service"
+import { SiteRequestDeniedError } from "@/src/site-integrations/site-request-denied-error"
 import { executeApprovedPageProbe } from "@/src/site-integrations/page-probe"
 import { matchUrl } from "@/src/site-integrations/url-matcher"
 import { resolveTabUrlForSupportCheck } from "@/src/shared/tab-url-helpers"
@@ -452,7 +453,13 @@ class ProviderTabResolution {
             reason: "host_permission_required",
             hostPermissionHostname: error.hostname,
           }
-        : { context: "error", error: createUserFacingResolutionError() },
+        : {
+            context: "error",
+            error: createUserFacingResolutionError(),
+            ...(error instanceof SiteRequestDeniedError
+              ? { reason: "provider_access_denied" as const }
+              : {}),
+          },
       tabId,
       { ...this.commitRequest(), supersedeInFlight: true }
     )

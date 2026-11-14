@@ -414,6 +414,9 @@
   "downloadError_providerRateLimited": {
     "message": "The site is limiting requests. Try again later."
   },
+  "downloadError_providerAccessDenied": {
+    "message": "The site denied access. Check that you can open the chapter on the site, then retry."
+  },
   "downloadError_providerChanged": {
     "message": "This site may have changed."
   },
@@ -1789,6 +1792,9 @@
   },
   "sidepanel_retrySeriesDescription": {
     "message": "Try loading the series information again."
+  },
+  "sidepanel_seriesAccessDenied": {
+    "message": "The site denied access. Check that you can open the series on the site, then retry."
   },
   "sidepanel_seriesHostPermissionRequired": {
     "message": "Allow Tako to access $HOST$ in Chrome’s extension settings, then retry.",

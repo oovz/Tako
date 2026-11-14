@@ -414,6 +414,9 @@
   "downloadError_providerRateLimited": {
     "message": "サイトがリクエストを制限しています。しばらくしてから再試行してください。"
   },
+  "downloadError_providerAccessDenied": {
+    "message": "サイトへのアクセスが拒否されました。サイトで話を開けることを確認してから、再試行してください。"
+  },
   "downloadError_providerChanged": {
     "message": "サイトの仕様が変更された可能性があります。"
   },
@@ -1786,6 +1789,9 @@
   },
   "sidepanel_retrySeriesDescription": {
     "message": "もう一度シリーズ情報を読み込んでください。"
+  },
+  "sidepanel_seriesAccessDenied": {
+    "message": "サイトへのアクセスが拒否されました。サイトでシリーズを開けることを確認してから、再試行してください。"
   },
   "sidepanel_seriesHostPermissionRequired": {
     "message": "Chrome の拡張機能設定で Tako に $HOST$ へのアクセスを許可してから、再試行してください。",

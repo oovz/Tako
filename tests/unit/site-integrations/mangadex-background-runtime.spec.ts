@@ -16,6 +16,7 @@ vi.mock("@/src/storage/site-integration-settings-service", () => ({
 
 import { backgroundSiteAdapter } from "@/src/site-integrations/mangadex/background-runtime"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { SiteRequestDeniedError } from "@/src/site-integrations/site-request-denied-error"
 
 function resolveMangadexSeriesData() {
   const resolver = backgroundSiteAdapter.background.series?.resolveSeriesData
@@ -49,6 +50,21 @@ describe("MangaDex background series resolution", () => {
     vi.stubGlobal("chrome", {
       storage: { session: { get: getSession, set: setSession } },
     })
+  })
+
+  it("preserves an API denial when the parallel chapter request succeeds", async () => {
+    const denial = new SiteRequestDeniedError()
+    mocks.fetchMangadexSeriesMetadata.mockRejectedValueOnce(denial)
+    mocks.fetchMangadexChapterList.mockResolvedValueOnce({ chapters: [] })
+
+    await expect(
+      resolveMangadexSeriesData()({
+        seriesUrl:
+          "https://mangadex.org/title/db692d58-4b13-4174-942a-837e532011a6",
+        rateLimitService,
+        siteIntegrationSettingsReader,
+      })
+    ).rejects.toBe(denial)
   })
 
   it("keeps optional probe policy provider-owned and nonfatal", async () => {

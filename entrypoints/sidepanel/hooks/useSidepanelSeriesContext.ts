@@ -9,7 +9,7 @@ import {
   type ActiveTabContextValue,
 } from "@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { MangaPageState } from "@/src/types/tab-state"
+import type { MangaPageState, TabContextError } from "@/src/types/tab-state"
 import {
   useChromeStorageValue,
   type StorageReadStatus,
@@ -44,6 +44,7 @@ export interface SidepanelSeriesContextData {
   retryHistory?: () => void
   retrySeriesContext?: () => void
   hostPermissionHostname?: string
+  seriesErrorReason?: TabContextError["reason"]
 }
 
 export async function resolveCurrentSidepanelWindowId(): Promise<
@@ -218,6 +219,8 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       activeTabContext.kind === "error"
         ? activeTabContext.hostPermissionHostname
         : undefined,
+    seriesErrorReason:
+      activeTabContext.kind === "error" ? activeTabContext.reason : undefined,
     retrySeriesContext:
       !isLoading && activeTabContext.kind === "error"
         ? retrySeriesContext

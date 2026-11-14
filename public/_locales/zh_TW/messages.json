@@ -414,6 +414,9 @@
   "downloadError_providerRateLimited": {
     "message": "該網站正在限制請求，請稍後重試。"
   },
+  "downloadError_providerAccessDenied": {
+    "message": "網站拒絕存取。請確認能在網站上開啟該章節，然後重試。"
+  },
   "downloadError_providerChanged": {
     "message": "該網站可能已發生變更。"
   },
@@ -1786,6 +1789,9 @@
   },
   "sidepanel_retrySeriesDescription": {
     "message": "請重新載入漫畫資訊。"
+  },
+  "sidepanel_seriesAccessDenied": {
+    "message": "網站拒絕存取。請確認能在網站上開啟這部漫畫，然後重試。"
   },
   "sidepanel_seriesHostPermissionRequired": {
     "message": "請在 Chrome 的擴充功能設定中允許 Tako 存取 $HOST$，然後重試。",
