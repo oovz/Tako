@@ -619,11 +619,19 @@ function buildPublusImageMetadata(input: {
 
 const PUBLUS_IMAGE_TYPES = new Set(["jpg", "jpeg", "png", "webp", "gif"])
 
-function assertPublusContentPath(file: string): void {
-  const invalidSegments = new Set(["", ".", ".."])
+function assertPublusContentPath(file: string, base: URL): void {
+  // SVGA configurations can refer to the shared directory beside the rendition.
+  const relativePath =
+    base.pathname.endsWith("/SVGA/normal_default/") &&
+    file.startsWith("../shared/")
+      ? file.slice("../shared/".length)
+      : file
   if (
-    /(?:^[a-z][a-z\d+.-]*:)|[\\?#]/i.test(file) ||
-    file.split("/").some((segment) => invalidSegments.has(segment))
+    /(?:^[a-z][a-z\d+.-]*:)|[\\?#\s]|%2f|%5c|%25/i.test(relativePath) ||
+    relativePath.split("/").some((segment) => {
+      const dots = segment.replaceAll(/%2e/gi, ".")
+      return dots === "" || dots === "." || dots === ".."
+    })
   ) {
     throw new ProviderContractError(
       `Comic Nettai PUBLUS content has an invalid content path: ${file}`
@@ -794,7 +802,7 @@ function buildPublusContentImageUrl(
   keys: PublusImageKeys,
   item: PublusImageContent
 ): string {
-  assertPublusContentPath(item.file)
+  assertPublusContentPath(item.file, trustedBaseUrl)
   const imageType = item.type.toLowerCase()
   if (!PUBLUS_IMAGE_TYPES.has(imageType)) {
     throw new ProviderContractError(

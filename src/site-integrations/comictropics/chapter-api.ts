@@ -134,14 +134,17 @@ export async function resolveComicNettaiChapterImageUrls(
   )
   const contentBaseUrl = assertViewerContentResponse(contentPayload)
 
+  const baseUrl = new URL(contentBaseUrl)
   const configUrl = new URL(
-    "configuration_pack.json",
-    contentBaseUrl
-  ).toString()
+    baseUrl.pathname.endsWith("/SVGA/")
+      ? "normal_default/configuration_pack.json"
+      : "configuration_pack.json",
+    baseUrl
+  )
   const configResponse = await integrationHttpClient.request({
     integrationId: "comictropics",
     endpointId: "comictropics-cdn-config",
-    url: configUrl,
+    url: configUrl.href,
     scope: "chapter",
     init: {
       headers: {
@@ -167,7 +170,7 @@ export async function resolveComicNettaiChapterImageUrls(
   let config: PublusConfig
   try {
     config = decodePublusConfigurationPack(rawConfig)
-    return buildPublusImageUrlsFromConfig(contentBaseUrl, config)
+    return buildPublusImageUrlsFromConfig(new URL(".", configUrl).href, config)
   } catch (error) {
     logger.error(
       "[comicnettai] Failed to decode Publus configuration pack",

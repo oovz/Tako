@@ -325,6 +325,37 @@ describe("Comic Nettai site integration", () => {
     )
   })
 
+  it("resolves the SVGA configuration and its shared chapter images", async () => {
+    const base =
+      "https://cdn.comicnettai.com/9_hash/epub/book_contents/c98/SVGA/"
+    const file = "../shared/item/xhtml/p-cover.xhtml"
+    const config = {
+      configuration: {
+        ...LIVE_PUBLUS_CONFIG.configuration,
+        contents: [{ file, index: 1, type: "jpeg" }],
+      },
+      [file]: LIVE_PUBLUS_CONFIG["item/xhtml/p-cover.xhtml"],
+    }
+    const fetchMock = vi.fn(async (url: string) => {
+      if (new URL(url).pathname === "/api/viewer/c") {
+        return Response.json({ status: "200", url: base, cty: 0 })
+      }
+      return url === `${base}normal_default/configuration_pack.json`
+        ? Response.json(config)
+        : new Response(null, { status: 403 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const [image] = await resolveComicNettaiChapterImageUrls({
+      id: "98",
+      url: "https://www.comicnettai.com/publus/viewer.html?cid=mock-cid",
+    })
+    expect(parsePublusImageTransportUrl(image).sourceUrl).toMatch(
+      /^https:\/\/cdn\.comicnettai\.com\/9_hash\/epub\/book_contents\/c98\/SVGA\/shared\/item\/xhtml\/p-cover\.xhtml\/[a-f0-9]+\.jpeg$/
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it("rejects viewer-provided configuration origins outside the Comic Nettai CDN", async () => {
     vi.stubGlobal(
       "fetch",
@@ -608,6 +639,25 @@ describe("Comic Nettai site integration", () => {
         ).toThrow("unsupported image type")
       }
     })
+
+    it.each(["../../shared/page", "../shared/%2e%2e/page", "../other/page"])(
+      "rejects traversal outside the SVGA shared image directory (%s)",
+      (file) => {
+        const config = {
+          configuration: {
+            ...LIVE_PUBLUS_CONFIG.configuration,
+            contents: [{ file, type: "jpeg" }],
+          },
+          [file]: LIVE_PUBLUS_CONFIG["item/xhtml/p-cover.xhtml"],
+        }
+        expect(() =>
+          buildPublusImageUrlsFromConfig(
+            `${BASE_URL}SVGA/normal_default/`,
+            config
+          )
+        ).toThrow("invalid content path")
+      }
+    )
   })
 
   it("fails rather than returning scrambled bytes when reconstruction is unavailable", async () => {
