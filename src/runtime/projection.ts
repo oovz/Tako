@@ -3,8 +3,10 @@ import type {
   DownloadTaskState,
   QueueTaskSummary,
 } from "@/src/domain/queue/state"
+import { isQueueRecoveryTask } from "@/src/domain/queue/task-lifecycle"
 
 const MAX_BADGE_COUNT = 999
+const RECENT_HISTORY_COUNT = 5
 
 export interface QueueViewProjection {
   queueView: QueueTaskSummary[]
@@ -75,6 +77,18 @@ function partitionQueueSummaries(summaries: QueueTaskSummary[]): {
   return { active, queued, terminal }
 }
 
+export function selectQueueHistory(
+  terminalTasks: QueueTaskSummary[]
+): QueueTaskSummary[] {
+  return terminalTasks
+    .toSorted(
+      (a, b) => (b.timestamps.completed ?? 0) - (a.timestamps.completed ?? 0)
+    )
+    .filter(
+      (task, index) => index < RECENT_HISTORY_COUNT || isQueueRecoveryTask(task)
+    )
+}
+
 export function projectToQueueView(
   downloadQueue: DownloadTaskState[]
 ): QueueViewProjection {
@@ -91,17 +105,11 @@ export function projectToQueueView(
   // Queued tasks preserve array order from downloadQueue (FIFO by default,
   // reorderable via moveTaskToTop). Do NOT sort by timestamps.created here —
   // that would undo manual reordering.
-  terminal.sort(
-    (a, b) => (b.timestamps.completed ?? 0) - (a.timestamps.completed ?? 0)
-  )
-
-  const history = terminal.slice(0, 5)
-
   return {
     queueView: [...active, ...queued],
     activeCount: active.length,
     queuedCount: queued.length,
     nonTerminalCount: active.length + queued.length,
-    historyView: history,
+    historyView: selectQueueHistory(terminal),
   }
 }

@@ -3,7 +3,12 @@ import type {
   DownloadTaskStatus,
 } from "@/src/shared/download-contract"
 import type { ChapterStatus } from "@/src/types/chapter"
-import type { DownloadTaskState, OutputAccounting, TaskChapter } from "./state"
+import type {
+  DownloadTaskState,
+  OutputAccounting,
+  QueueTaskSummary,
+  TaskChapter,
+} from "./state"
 
 const TERMINAL_TASK_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
   "completed",
@@ -41,6 +46,16 @@ export function isTerminalDownloadTask(
   task: Pick<DownloadTaskState, "status">
 ): boolean {
   return TERMINAL_TASK_STATUSES.has(task.status)
+}
+
+export function isQueueRecoveryTask(
+  task: Pick<QueueTaskSummary, "status" | "saveConfirmedAt">
+): boolean {
+  return (
+    task.status === "failed" ||
+    task.status === "partial_success" ||
+    (task.status === "completed" && task.saveConfirmedAt === undefined)
+  )
 }
 
 export function isTerminalChapterStatus(status: ChapterStatus): boolean {

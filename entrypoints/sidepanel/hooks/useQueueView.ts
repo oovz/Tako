@@ -6,6 +6,8 @@ import {
 } from "@/src/shared/download-contract"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { PublicHttpsUrlSchema } from "@/src/runtime/series-data-schemas"
+import { selectQueueHistory } from "@/src/runtime/projection"
+import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import {
   useChromeStorageValue,
@@ -110,23 +112,10 @@ export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
   return z.array(z.unknown()).parse(value).map(normalizeQueueTaskSummary)
 }
 
-function isTerminalTask(task: QueueTaskSummary): boolean {
-  return (
-    task.status === "completed" ||
-    task.status === "partial_success" ||
-    task.status === "failed" ||
-    task.status === "canceled"
-  )
-}
-
 export function normalizeHistoryView(value: unknown): QueueTaskSummary[] {
-  return normalizeQueueView(value)
-    .filter(isTerminalTask)
-    .sort(
-      (left, right) =>
-        (right.timestamps.completed ?? 0) - (left.timestamps.completed ?? 0)
-    )
-    .slice(0, 5)
+  return selectQueueHistory(
+    normalizeQueueView(value).filter(isTerminalDownloadTask)
+  )
 }
 
 interface QueueProjectionStorageValue {
@@ -143,7 +132,7 @@ export function normalizeQueueProjection(
 
   const queue = normalizeQueueView(value[SESSION_STORAGE_KEYS.queueView])
   return {
-    queueView: queue.filter((task) => !isTerminalTask(task)),
+    queueView: queue.filter((task) => !isTerminalDownloadTask(task)),
     historyView: normalizeHistoryView(value[SESSION_STORAGE_KEYS.historyView]),
   }
 }

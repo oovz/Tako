@@ -4,6 +4,7 @@ import {
   SETTINGS_STORAGE_KEYS,
 } from "../../../src/runtime/storage-keys"
 import type { DownloadTaskState } from "../../../src/domain/queue/state"
+import { projectToQueueView } from "../../../src/runtime/projection"
 import { rebuildSeriesHistory } from "../../../src/domain/history/cleanup-policy"
 import type { DownloadedChapterRecord } from "../../../src/domain/history/types"
 import type { ExtensionSettings } from "../../../src/domain/settings/types"
@@ -537,23 +538,9 @@ export async function seedDownloadQueueStateInContext(
   queue: DownloadTaskState[]
 ): Promise<void> {
   const ids = queue.map((task) => task.id).sort()
-  const queueViewIds = [
-    ...queue
-      .filter((task) => task.status === "downloading")
-      .toSorted((left, right) => left.created - right.created),
-    ...queue.filter((task) => task.status === "queued"),
-  ].map((task) => task.id)
-  const historyViewIds = queue
-    .filter(
-      (task) =>
-        task.status === "completed" ||
-        task.status === "partial_success" ||
-        task.status === "failed" ||
-        task.status === "canceled"
-    )
-    .toSorted((left, right) => (right.completed ?? 0) - (left.completed ?? 0))
-    .slice(0, 5)
-    .map((task) => task.id)
+  const { queueView, historyView } = projectToQueueView(queue)
+  const queueViewIds = queueView.map((task) => task.id)
+  const historyViewIds = historyView.map((task) => task.id)
   const worker = await getServiceWorker(context)
 
   if (queue.some((task) => task.status === "downloading")) {

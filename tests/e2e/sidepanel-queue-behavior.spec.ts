@@ -164,7 +164,7 @@ test.describe("Side panel queue behavior", () => {
     await sp.close()
   })
 
-  test("the bounded Queue recovery view backfills after a row is dismissed", async ({
+  test("keeps older issues visible after newer saves and dismisses only the selected issue", async ({
     context,
     extensionId,
     page,
@@ -189,9 +189,25 @@ test.describe("Side panel queue behavior", () => {
         })
       }
     )
+    const savedTasks = Array.from({ length: 3 }, (_, index) =>
+      makeTask({
+        id: `saved-task-${index}`,
+        seriesTitle: `Saved Task ${index}`,
+        status: "completed",
+        created: now - 2000 + index,
+        completed: now - 500 + index,
+        chapters: [
+          {
+            ...makeChapter(buildExampleUrl(`/saved-${index}`), "completed"),
+            outputDestination: "downloads-api",
+            saveConfirmedAt: now - 500 + index,
+          },
+        ],
+      })
+    )
 
     await getTabId(page, context)
-    await seedGlobalQueue(context, historyTasks)
+    await seedGlobalQueue(context, [...historyTasks, ...savedTasks])
 
     await expect
       .poll(async () => {
@@ -201,28 +217,20 @@ test.describe("Side panel queue behavior", () => {
         return (
           historyView
             ?.filter((task) => task.status === "failed")
-            .map((task) => task.seriesTitle)
-            .slice(0, 5) ?? []
+            .map((task) => task.seriesTitle) ?? []
         )
       })
-      .toEqual([
-        "History Task 1",
-        "History Task 2",
-        "History Task 3",
-        "History Task 4",
-        "History Task 5",
-      ])
+      .toEqual(historyTasks.map((task) => task.seriesTitle))
 
     const sp = await context.newPage()
     await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
       waitUntil: "domcontentloaded",
     })
     await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByText("History Task 1")).toBeVisible({
-      timeout: 15000,
-    })
-    await expect(sp.getByText("History Task 5")).toBeVisible()
-    await expect(sp.getByText("History Task 6")).toHaveCount(0)
+    for (const task of historyTasks) {
+      await expect(sp.getByText(task.seriesTitle)).toBeVisible()
+    }
+    await expect(sp.getByText("Saved Task 0")).toHaveCount(0)
 
     const firstHistoryTaskRow = sp.locator('[data-task-id="history-task-1"]')
     const feedback = await openTaskFeedback(firstHistoryTaskRow)
@@ -233,9 +241,8 @@ test.describe("Side panel queue behavior", () => {
       (state) =>
         !state.downloadQueue.some((task) => task.id === "history-task-1")
     )
-    await expect(sp.getByText("History Task 6")).toBeVisible({
-      timeout: 15000,
-    })
+    await expect(firstHistoryTaskRow).toHaveCount(0)
+    await expect(sp.getByText("History Task 6")).toBeVisible()
     await sp.close()
   })
 

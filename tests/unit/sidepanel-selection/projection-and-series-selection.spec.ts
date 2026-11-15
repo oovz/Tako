@@ -6,7 +6,7 @@ import {
 } from "@/entrypoints/sidepanel/hooks/useChapterSelections"
 
 describe("side panel stored views", () => {
-  it("shows the five most recently completed terminal tasks and places undated history last", () => {
+  it("keeps recent terminal history and older issues in completion order", () => {
     const tasks = Array.from({ length: 7 }, (_, index) => ({
       id: String(index),
       seriesKey: "mangadex#series",
@@ -14,6 +14,7 @@ describe("side panel stored views", () => {
       siteIntegration: "mangadex",
       destination: { kind: "downloads-api" },
       status: "completed",
+      saveConfirmedAt: 1,
       chapters: { total: 1, completed: 1, unsuccessful: 0 },
       timestamps: {
         created: index,
@@ -30,6 +31,20 @@ describe("side panel stored views", () => {
     expect(
       normalizeHistoryView([tasks[0], tasks[1]]).map((task) => task.id)
     ).toEqual(["1", "0"])
+    const olderIssues = [
+      { ...tasks[0], status: "failed" },
+      { ...tasks[1], status: "partial_success" },
+      ...tasks.slice(2),
+    ]
+    expect(normalizeHistoryView(olderIssues).map((task) => task.id)).toEqual([
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "0",
+    ])
   })
 
   it("replaces a same-sized selection, preserves another series, and clears only the requested series", () => {

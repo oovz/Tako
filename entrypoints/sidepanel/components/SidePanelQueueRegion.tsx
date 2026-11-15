@@ -3,6 +3,7 @@ import { usePanelLayoutMotion } from "../hooks/usePanelLayoutMotion"
 import { useMemo, useRef, useState, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
+import { isQueueRecoveryTask } from "@/src/domain/queue/task-lifecycle"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "../hooks/useActiveTaskProgress"
 import type { CancelTaskResult } from "../types"
 import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
@@ -151,12 +152,7 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
     (task) => task.status === "downloading"
   )
   const queued = props.queueTasks.filter((task) => task.status === "queued")
-  const recovery = props.historyTasks.filter(
-    (task) =>
-      task.status === "failed" ||
-      task.status === "partial_success" ||
-      (task.status === "completed" && task.saveConfirmedAt === undefined)
-  )
+  const recovery = props.historyTasks.filter(isQueueRecoveryTask)
   const currentRows = [
     ...active,
     ...recovery.filter((task) => lanes.get(task.id) === "active"),

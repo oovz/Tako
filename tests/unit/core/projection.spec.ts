@@ -188,26 +188,35 @@ describe("projectToQueueView", () => {
     )
   })
 
-  it("limits history projection to the five most-recent terminal tasks", () => {
+  it("keeps recovery tasks outside the five most recent terminal records", () => {
     const tasks: DownloadTaskState[] = [
-      makeTask({ id: "t1", status: "failed", completed: 1 }),
-      makeTask({ id: "t2", status: "failed", completed: 2 }),
-      makeTask({ id: "t3", status: "failed", completed: 3 }),
-      makeTask({ id: "t4", status: "failed", completed: 4 }),
-      makeTask({ id: "t5", status: "failed", completed: 5 }),
-      makeTask({ id: "t6", status: "failed", completed: 6 }),
+      makeTask({ id: "old-canceled", status: "canceled", completed: 0 }),
+      makeTask({ id: "old-failed", status: "failed", completed: 1 }),
+      makeTask({ id: "old-partial", status: "partial_success", completed: 2 }),
+      makeTask({ id: "old-unconfirmed", status: "completed", completed: 3 }),
+      makeTask({ id: "recent-failed", status: "failed", completed: 4 }),
+      makeTask({ id: "recent-canceled-1", status: "canceled", completed: 5 }),
+      makeTask({ id: "recent-canceled-2", status: "canceled", completed: 6 }),
+      makeTask({ id: "recent-canceled-3", status: "canceled", completed: 7 }),
+      makeTask({
+        id: "recent-partial",
+        status: "partial_success",
+        completed: 8,
+      }),
     ]
 
     const result = projectToQueueView(tasks)
 
     expect(result.historyView.map((task) => task.id)).toEqual([
-      "t6",
-      "t5",
-      "t4",
-      "t3",
-      "t2",
+      "recent-partial",
+      "recent-canceled-3",
+      "recent-canceled-2",
+      "recent-canceled-1",
+      "recent-failed",
+      "old-unconfirmed",
+      "old-partial",
+      "old-failed",
     ])
-    expect(result.historyView).toHaveLength(5)
   })
 
   it("preserves queued task array order (supports moveTaskToTop reordering)", () => {
