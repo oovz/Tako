@@ -697,6 +697,44 @@
   "options_savedFolderRepairRequired": {
     "message": "저장된 폴더에 대한 접근 권한이 필요합니다. 접근 권한을 다시 부여하거나 폴더를 선택하세요."
   },
+  "options_folderSetupTitle": {
+    "message": "폴더 설정 완료"
+  },
+  "options_folderSetupInstructions": {
+    "message": "이 폴더로 다운로드하기 전에 설정을 완료하세요. 이 탭은 잠시 다른 페이지로 이동한 뒤 자동으로 돌아옵니다. Chrome이 다시 액세스 권한을 요청하면 $CHOICE$을 선택하세요.",
+    "placeholders": {
+      "choice": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_folderSetupReady": {
+    "message": "폴더가 준비되었습니다. 옵션을 닫아도 다운로드를 계속할 수 있습니다."
+  },
+  "options_folderSetupAlwaysAllow": {
+    "message": "방문할 때마다 허용"
+  },
+  "options_folderSetupFinish": {
+    "message": "설정 계속"
+  },
+  "options_folderSetupRequestAccess": {
+    "message": "Chrome 권한 요청 열기"
+  },
+  "options_folderSetupSaveChanges": {
+    "message": "계속하려면 다른 변경 사항을 저장하거나 취소하세요."
+  },
+  "options_folderSetupOtherTabs": {
+    "message": "다른 Tako 탭을 닫고 다시 시도하세요."
+  },
+  "options_folderSetupDownloadsActive": {
+    "message": "현재 폴더 다운로드가 끝난 후 다시 시도하세요."
+  },
+  "options_folderSetupUnavailable": {
+    "message": "지속적인 폴더 액세스를 확인하지 못했습니다. 다시 시도하세요."
+  },
+  "options_folderSetupTemporary": {
+    "message": "Chrome이 임시 액세스를 허용했습니다. 권한 요청을 열고 ‘방문할 때마다 허용’을 선택하세요."
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "다운로드 폴더를 선택하지 않았습니다"
   },
@@ -1738,6 +1776,9 @@
   },
   "startDownloadError_hostPermissionRequired": {
     "message": "이 사이트의 접근 권한이 없습니다. 권한을 부여한 뒤 다시 시도하세요."
+  },
+  "startDownloadError_folderSetupRequired": {
+    "message": "옵션 → 저장 및 파일에서 다운로드 폴더 설정을 완료하세요."
   },
   "startDownloadError_durableStateFailure": {
     "message": "다운로드를 대기열에 저장하지 못했습니다. 다시 시도하세요."

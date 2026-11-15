@@ -48,6 +48,7 @@ const EXPECTED_RUNTIME_MESSAGES = {
   GET_UI_PREFERENCES: "background|query|sidepanel,options|runtime-ready",
   REFRESH_FOLDER_ACTION_ITEM:
     "background|command|sidepanel,options|control-ready",
+  VERIFY_FOLDER_SETUP: "background|command|options|runtime-ready",
   GET_PERSISTENT_ERRORS: "background|query|sidepanel|control-ready",
   UNDO_QUEUE_ACTION: "background|command|sidepanel,options|runtime-ready",
   CLEAR_PERSISTED_DOWNLOAD_HISTORY: "background|command|options|runtime-ready",

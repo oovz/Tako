@@ -697,6 +697,44 @@
   "options_savedFolderRepairRequired": {
     "message": "已保存的文件夹需要访问权限。请重新授权或选择文件夹。"
   },
+  "options_folderSetupTitle": {
+    "message": "完成文件夹设置"
+  },
+  "options_folderSetupInstructions": {
+    "message": "下载到此文件夹前，请先完成设置。此标签页将短暂切换到其他页面，然后自动返回。如果 Chrome 再次请求访问权限，请选择 $CHOICE$。",
+    "placeholders": {
+      "choice": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_folderSetupReady": {
+    "message": "文件夹已准备就绪。关闭选项后，下载仍可继续。"
+  },
+  "options_folderSetupAlwaysAllow": {
+    "message": "每次访问时都允许"
+  },
+  "options_folderSetupFinish": {
+    "message": "继续设置"
+  },
+  "options_folderSetupRequestAccess": {
+    "message": "打开 Chrome 权限提示"
+  },
+  "options_folderSetupSaveChanges": {
+    "message": "请先保存或放弃其他更改，再继续。"
+  },
+  "options_folderSetupOtherTabs": {
+    "message": "请关闭其他 Tako 标签页，再重试。"
+  },
+  "options_folderSetupDownloadsActive": {
+    "message": "请等待当前的文件夹下载完成，再重试。"
+  },
+  "options_folderSetupUnavailable": {
+    "message": "无法验证文件夹的持续访问权限。请重试。"
+  },
+  "options_folderSetupTemporary": {
+    "message": "Chrome 授予了临时访问权限。请打开权限提示并选择「每次访问时都允许」。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未选择下载文件夹"
   },
@@ -1735,6 +1773,9 @@
   },
   "startDownloadError_hostPermissionRequired": {
     "message": "缺少此站点的访问权限。请授予权限后重试。"
+  },
+  "startDownloadError_folderSetupRequired": {
+    "message": "请在选项 → 存储与文件中完成下载文件夹的设置。"
   },
   "startDownloadError_durableStateFailure": {
     "message": "无法将下载保存到队列。请重试。"

@@ -10,6 +10,7 @@ export const START_DOWNLOAD_FAILURE_CODES = [
   "invalid_chapter_selection",
   "integration_disabled",
   "host_permission_required",
+  "folder_setup_required",
   "durable_state_failure",
 ] as const
 

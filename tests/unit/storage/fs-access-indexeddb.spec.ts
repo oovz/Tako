@@ -6,6 +6,8 @@ import {
   loadDownloadRootHandle,
   collectUnusedDownloadRootHandles,
   adoptDownloadRootHandle,
+  completeFolderSetup,
+  readFolderSetupRequired,
   saveDownloadRootHandle,
 } from "@/src/storage/fs-access"
 
@@ -98,6 +100,30 @@ function createIndexedDbHarness() {
 }
 
 describe("File System Access IndexedDB lifecycle", () => {
+  it("clears setup only for the saved capability that was verified", async () => {
+    const harness = createIndexedDbHarness()
+    vi.stubGlobal("indexedDB", harness.indexedDb)
+    const handle = { name: "Downloads" } as FileSystemDirectoryHandle
+    const stored = { handle, setupRequired: true }
+    const read = readFolderSetupRequired("folder-id")
+    await vi.waitFor(() => expect(harness.requests).toHaveLength(1))
+    harness.requests[0].result = stored
+    harness.requests[0].onsuccess?.()
+    harness.transactions[0].oncomplete?.()
+    await expect(read).resolves.toBe(true)
+
+    const complete = completeFolderSetup("folder-id")
+    await vi.waitFor(() => expect(harness.requests).toHaveLength(2))
+    harness.requests[1].result = stored
+    harness.requests[1].onsuccess?.()
+    expect(harness.objectStore.put).toHaveBeenCalledExactlyOnceWith(
+      handle,
+      "folder-id"
+    )
+    harness.transactions[1].oncomplete?.()
+    await expect(complete).resolves.toBeUndefined()
+  })
+
   it("reclaims unreferenced capabilities in one completed transaction", async () => {
     const harness = createIndexedDbHarness()
     vi.stubGlobal("indexedDB", harness.indexedDb)

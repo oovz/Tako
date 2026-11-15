@@ -5,6 +5,7 @@ import { t } from "@/src/runtime/i18n"
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
 import { DownloadDestinationSection } from "../components/DownloadDestinationSection"
+import type { FolderSetupAction } from "../components/DownloadDestinationSection-contract"
 import { ArchiveFormatPicker } from "../components/ArchiveFormatPicker"
 
 import { StorageTemplates } from "./StorageTab-templates"
@@ -14,6 +15,7 @@ interface StorageTabProps {
   onChange: (updates: Partial<ExtensionSettings>) => void
   selectedFolderName: string | null
   folderAccessRequired: boolean
+  folderSetup?: FolderSetupAction
   onGrantFolderAccess: () => Promise<boolean>
   onPickFolder: () => Promise<void>
   isPickingFolder: boolean
@@ -25,6 +27,7 @@ export function StorageTab({
   onChange,
   selectedFolderName,
   folderAccessRequired,
+  folderSetup,
   onGrantFolderAccess,
   onPickFolder,
   isPickingFolder,
@@ -73,6 +76,7 @@ export function StorageTab({
         downloads={settings.downloads}
         selectedFolderName={selectedFolderName}
         folderAccessRequired={folderAccessRequired}
+        folderSetup={folderSetup}
         onGrantFolderAccess={onGrantFolderAccess}
         isPickingFolder={isPickingFolder}
         isSaving={isSaving}

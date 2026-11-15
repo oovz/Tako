@@ -18,6 +18,7 @@ vi.mock("@/src/storage/fs-access", () => ({
   ),
   saveDownloadRootHandle: vi.fn(),
   queryFsaPermission: vi.fn(async () => "prompt"),
+  readFolderSetupRequired: vi.fn(async () => false),
   verifyPermission: vi.fn(async () => true),
 }))
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -48,6 +49,7 @@ it("renews the displayed folder after another Options page changes the default",
       savedHandleId: "displayed-folder",
       settingsBuffer: settings,
       onSettingsChange: vi.fn(),
+      canVerifyFolderSetup: () => true,
     })
     return null
   }
@@ -105,6 +107,7 @@ it.each([false, true])(
         savedHandleId: id,
         settingsBuffer: settings,
         onSettingsChange: vi.fn(),
+        canVerifyFolderSetup: () => true,
       })
       return null
     }
@@ -207,6 +210,7 @@ it.each(["current", "replaced"])(
         savedHandleId: id,
         settingsBuffer: settings,
         onSettingsChange: vi.fn(),
+        canVerifyFolderSetup: () => true,
       })
       return null
     }

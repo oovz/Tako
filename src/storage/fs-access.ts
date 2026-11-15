@@ -16,6 +16,19 @@ import { probeDirectory } from "./fs-access-directory-probe"
 export type DirHandle = FileSystemDirectoryHandle
 export type FileHandle = FileSystemFileHandle
 
+interface PendingFolderSetup {
+  handle: DirHandle
+  setupRequired: true
+}
+
+type StoredDownloadRoot = DirHandle | PendingFolderSetup
+
+function isPendingFolderSetup(
+  record: StoredDownloadRoot | undefined
+): record is PendingFolderSetup {
+  return record !== undefined && "setupRequired" in record
+}
+
 export const DOWNLOAD_ROOT_DB_NAME = "tako-fs"
 export const DOWNLOAD_ROOT_STORE_NAME = "handles"
 export const MANAGED_DOWNLOAD_ROOT_STORE_NAME = "managed-handles"
@@ -108,14 +121,17 @@ async function runTransaction<T>(
     store: IDBObjectStore,
     transaction: IDBTransaction
   ) => IDBRequest,
-  getResult: (request: IDBRequest) => T,
+  getResult: (request: IDBRequest, store: IDBObjectStore) => T,
   stores: string[] = [DOWNLOAD_ROOT_STORE_NAME]
 ): Promise<T> {
   const db = await openDB()
   try {
     const tx = db.transaction(stores, mode)
-    const request = requestFactory(tx.objectStore(stores[0]), tx)
-    return await waitForTransaction(tx, request, getResult)
+    const store = tx.objectStore(stores[0])
+    const request = requestFactory(store, tx)
+    return await waitForTransaction(tx, request, () =>
+      getResult(request, store)
+    )
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error))
   } finally {
@@ -186,9 +202,30 @@ async function idbAdd(key: string, value: unknown): Promise<void> {
 // reopening Options or restarting the worker only needs to read the saved ID.
 export async function saveDownloadRootHandle(
   handle: DirHandle,
-  handleId: string
+  handleId: string,
+  options?: { setupRequired: true }
 ): Promise<void> {
-  await idbAdd(handleId, handle)
+  const record: StoredDownloadRoot = options
+    ? { handle, setupRequired: true }
+    : handle
+  await idbAdd(handleId, record)
+}
+
+export async function readFolderSetupRequired(
+  handleId: string
+): Promise<boolean> {
+  return isPendingFolderSetup(await idbGet<StoredDownloadRoot>(handleId))
+}
+
+export async function completeFolderSetup(handleId: string): Promise<void> {
+  await runTransaction(
+    "readwrite",
+    (store) => store.get(handleId),
+    (request, store) => {
+      const record = request.result as StoredDownloadRoot | undefined
+      if (isPendingFolderSetup(record)) store.put(record.handle, handleId)
+    }
+  )
 }
 
 /** Register a capability once the background accepts it as a durable reference. */
@@ -238,7 +275,8 @@ export async function loadDownloadRootHandle(
       .downloads.customDirectoryHandleId
   }
   if (handleId === null) return undefined
-  return idbGet<DirHandle>(handleId)
+  const record = await idbGet<StoredDownloadRoot>(handleId)
+  return isPendingFolderSetup(record) ? record.handle : record
 }
 
 export async function verifyPermission(

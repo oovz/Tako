@@ -22,6 +22,12 @@ const mocks = vi.hoisted(() => ({
   getSiteOverrides: vi.fn(),
   getSiteSettings: vi.fn(),
   processDownloadQueue: vi.fn(async () => undefined),
+  readFolderSetupRequired: vi.fn(async (_handleId: string) => false),
+}))
+
+vi.mock("@/src/storage/fs-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/storage/fs-access")>()),
+  readFolderSetupRequired: mocks.readFolderSetupRequired,
 }))
 
 vi.mock("@/src/runtime/logger", () => ({
@@ -428,6 +434,27 @@ describe("START_DOWNLOAD background authority", () => {
       code: "host_permission_required",
     })
     expect(enqueueDownloadTask).not.toHaveBeenCalled()
+  })
+
+  it("queues nothing for a newly selected folder until setup is verified", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS)
+    settings.downloads.destination = "file-system-access"
+    settings.downloads.customDirectoryHandleId = "selected-folder"
+    mocks.getSettings.mockResolvedValue(settings)
+    mocks.readFolderSetupRequired.mockResolvedValueOnce(true)
+
+    await expect(
+      commands.startDownload(payload, "command-start")
+    ).rejects.toMatchObject({ code: "folder_setup_required" })
+    expect(mocks.readFolderSetupRequired).toHaveBeenCalledWith(
+      "selected-folder"
+    )
+    expect(enqueueDownloadTask).not.toHaveBeenCalled()
+
+    await expect(
+      commands.startDownload(payload, "command-start")
+    ).resolves.toEqual({ taskId: "command-start" })
+    expect(enqueueDownloadTask).toHaveBeenCalledOnce()
   })
 
   it("converges a replayed START envelope on the existing durable task", async () => {

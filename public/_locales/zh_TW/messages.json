@@ -697,6 +697,44 @@
   "options_savedFolderRepairRequired": {
     "message": "已儲存的資料夾需要存取權限。請重新授權或選擇資料夾。"
   },
+  "options_folderSetupTitle": {
+    "message": "完成資料夾設定"
+  },
+  "options_folderSetupInstructions": {
+    "message": "下載到此資料夾前，請先完成設定。這個分頁會短暫切換至其他頁面，再自動返回。如果 Chrome 再次要求存取權限，請選擇 $CHOICE$。",
+    "placeholders": {
+      "choice": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_folderSetupReady": {
+    "message": "資料夾已準備就緒。關閉選項後，下載仍可繼續。"
+  },
+  "options_folderSetupAlwaysAllow": {
+    "message": "每次造訪時允許"
+  },
+  "options_folderSetupFinish": {
+    "message": "繼續設定"
+  },
+  "options_folderSetupRequestAccess": {
+    "message": "開啟 Chrome 權限提示"
+  },
+  "options_folderSetupSaveChanges": {
+    "message": "請先儲存或捨棄其他變更，再繼續。"
+  },
+  "options_folderSetupOtherTabs": {
+    "message": "請關閉其他 Tako 分頁，再試一次。"
+  },
+  "options_folderSetupDownloadsActive": {
+    "message": "請等目前的資料夾下載完成，再試一次。"
+  },
+  "options_folderSetupUnavailable": {
+    "message": "無法驗證資料夾的持續存取權限。請再試一次。"
+  },
+  "options_folderSetupTemporary": {
+    "message": "Chrome 授予了暫時存取權限。請開啟權限提示並選擇「每次造訪時允許」。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未選擇下載資料夾"
   },
@@ -1735,6 +1773,9 @@
   },
   "startDownloadError_hostPermissionRequired": {
     "message": "缺少此網站的存取權限。請授予權限後重試。"
+  },
+  "startDownloadError_folderSetupRequired": {
+    "message": "請在選項 → 儲存與檔案中完成下載資料夾的設定。"
   },
   "startDownloadError_durableStateFailure": {
     "message": "無法將下載儲存至佇列。請重試。"

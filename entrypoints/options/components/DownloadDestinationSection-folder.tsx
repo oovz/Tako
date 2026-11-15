@@ -1,10 +1,16 @@
 import { AlertTriangle, Folder } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { detectFsaCapabilities } from "@/src/storage/fs-access"
 import { SettingsRow } from "./primitives/SettingsRow"
 import { t } from "@/src/runtime/i18n"
 import type { DownloadDestinationSectionProps } from "./DownloadDestinationSection-contract"
+import { DownloadFolderSetup } from "./DownloadFolderSetup"
+import {
+  clearFolderSetupFeedback,
+  readVerifiedFolder,
+} from "../folder-setup-feedback"
 
 type FolderDetailsProps = DownloadDestinationSectionProps & {
   isFsaActive: boolean
@@ -119,13 +125,43 @@ function DownloadFolderMissing({
 }
 
 function DownloadFolderDetails(props: FolderDetailsProps) {
-  const { selectedFolderName, isFsaActive, fsaSupported } = props
+  const {
+    selectedFolderName,
+    isFsaActive,
+    fsaSupported,
+    folderSetup,
+    folderAccessRequired,
+    isPickingFolder,
+    isSaving,
+    downloads,
+  } = props
+  const [verifiedFolder] = useState(() =>
+    readVerifiedFolder(
+      typeof window === "undefined" ? "" : window.location.search
+    )
+  )
+  useEffect(() => {
+    if (verifiedFolder) clearFolderSetupFeedback()
+  }, [verifiedFolder])
+  const showFolderReady =
+    fsaSupported &&
+    isFsaActive &&
+    selectedFolderName &&
+    !folderSetup &&
+    !folderAccessRequired &&
+    verifiedFolder !== null &&
+    verifiedFolder === downloads.customDirectoryHandleId
   return (
     <div className="flex flex-col gap-2 mt-1">
       <p className="text-xs text-muted-foreground">
         {folderDescription(selectedFolderName, isFsaActive)}
       </p>
       <DownloadFolderActions {...props} />
+      {showFolderReady && (
+        <p className="text-xs text-muted-foreground" role="status">
+          {t("options_folderSetupReady")}
+        </p>
+      )}
       {/* FSA Unsupported Warning */}
       {!fsaSupported && (
         <p className="text-xs text-destructive">
@@ -133,7 +169,16 @@ function DownloadFolderDetails(props: FolderDetailsProps) {
         </p>
       )}
 
-      <DownloadFolderAccessRepair {...props} />
+      {isFsaActive && folderSetup ? (
+        <DownloadFolderSetup
+          key={folderSetup.handleId}
+          folderSetup={folderSetup}
+          folderAccessRequired={folderAccessRequired}
+          busy={isPickingFolder || isSaving}
+        />
+      ) : (
+        <DownloadFolderAccessRepair {...props} />
+      )}
       <DownloadFolderMissing {...props} />
     </div>
   )

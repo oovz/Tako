@@ -19,6 +19,7 @@ vi.mock("@/src/storage/fs-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/storage/fs-access")>()),
   loadDownloadRootHandle: handleStorage.load,
   saveDownloadRootHandle: handleStorage.stage,
+  readFolderSetupRequired: vi.fn(async () => false),
 }))
 
 let root: Root
@@ -544,7 +545,8 @@ describe("Options folder workflows", () => {
     })
     expect(handleStorage.stage).toHaveBeenCalledWith(
       selected.handle,
-      configuration.settings.downloads.customDirectoryHandleId
+      configuration.settings.downloads.customDirectoryHandleId,
+      { setupRequired: true }
     )
     expect(container.textContent).not.toContain(t("options_unsavedChanges"))
   })

@@ -26,6 +26,7 @@ vi.mock("@/src/storage/fs-access", () => ({
   saveDownloadRootHandle: boundary.stage,
   verifyPermission: boundary.verify,
   queryFsaPermission: vi.fn(async () => "granted"),
+  readFolderSetupRequired: vi.fn(async () => false),
 }))
 vi.mock("@/src/site-integrations/host-permission-service", () => ({
   requestIntegrationHostPermission: boundary.request,
@@ -161,7 +162,8 @@ it("stages the picked capability before saving and clears a settled pending fold
   expect(order).toEqual(["stage", "save"])
   expect(boundary.stage).toHaveBeenCalledWith(
     handle,
-    state.settings?.downloads.customDirectoryHandleId
+    state.settings?.downloads.customDirectoryHandleId,
+    { setupRequired: true }
   )
   expect(state.settings?.downloads.customDirectoryHandleId).toEqual(
     expect.any(String)

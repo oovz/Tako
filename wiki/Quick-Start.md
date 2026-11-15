@@ -50,7 +50,7 @@ You can also include a series cover and ComicInfo.xml metadata for compatible re
 
 ## Choose a save folder
 
-In **Options → Storage & Files**, keep **Use browser downloads** to use Chrome's download location, or choose **Use custom folder (File System Access)** and select a folder. Click **Save Changes** to use that choice for new downloads.
+In **Options → Storage & Files**, keep **Use browser downloads** to use Chrome's download location, or choose **Use custom folder (File System Access)** and select a folder. Click **Save Changes**. For a custom folder, finish setup in Options and choose **Allow on every visit** when Chrome asks again.
 
 You can change these defaults while a download is running. Tasks already in the queue keep their own folder and requested filenames, including when you retry or restart them. To save a chapter somewhere else, change the default and create a new task.
 

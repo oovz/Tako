@@ -697,6 +697,44 @@
   "options_savedFolderRepairRequired": {
     "message": "The saved folder needs access. Grant access again or select a folder."
   },
+  "options_folderSetupTitle": {
+    "message": "Finish folder setup"
+  },
+  "options_folderSetupInstructions": {
+    "message": "Finish setup before downloading to this folder. This tab will briefly switch pages and return automatically. If Chrome asks for access again, choose $CHOICE$.",
+    "placeholders": {
+      "choice": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_folderSetupReady": {
+    "message": "Folder ready. Downloads can continue after you close Options."
+  },
+  "options_folderSetupAlwaysAllow": {
+    "message": "Allow on every visit"
+  },
+  "options_folderSetupFinish": {
+    "message": "Continue setup"
+  },
+  "options_folderSetupRequestAccess": {
+    "message": "Open Chrome permission prompt"
+  },
+  "options_folderSetupSaveChanges": {
+    "message": "Save or discard your other changes before continuing."
+  },
+  "options_folderSetupOtherTabs": {
+    "message": "Close the other Tako tabs, then try again."
+  },
+  "options_folderSetupDownloadsActive": {
+    "message": "Wait for your current folder downloads to finish, then try again."
+  },
+  "options_folderSetupUnavailable": {
+    "message": "Could not verify persistent folder access. Try again."
+  },
+  "options_folderSetupTemporary": {
+    "message": "Chrome granted temporary access. Open the prompt and choose Allow on every visit."
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "No download folder selected"
   },
@@ -1738,6 +1776,9 @@
   },
   "startDownloadError_hostPermissionRequired": {
     "message": "Host access for this site is missing. Grant permission and try again."
+  },
+  "startDownloadError_folderSetupRequired": {
+    "message": "Finish setting up the download folder in Options → Storage & Files."
   },
   "startDownloadError_durableStateFailure": {
     "message": "The download could not be saved to the queue. Try again."

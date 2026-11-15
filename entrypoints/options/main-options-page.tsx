@@ -90,6 +90,15 @@ function OptionsTabContent({
           onChange={state.handleSettingsChange}
           selectedFolderName={state.selectedFolderName}
           folderAccessRequired={state.folderAccessRequired}
+          folderSetup={
+            state.folderSetup && {
+              ...state.folderSetup,
+              disabled:
+                state.hasUnsavedChanges ||
+                state.hasExternalChanges ||
+                state.isResolvingExternalChanges,
+            }
+          }
           onPickFolder={state.pickDownloadFolder}
           onGrantFolderAccess={state.grantDownloadFolderAccess}
           isPickingFolder={state.isPickingFolder}

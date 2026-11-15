@@ -13,6 +13,7 @@ const START_DOWNLOAD_ERROR_KEYS: Record<
   invalid_chapter_selection: "startDownloadError_invalidChapterSelection",
   integration_disabled: "startDownloadError_integrationDisabled",
   host_permission_required: "startDownloadError_hostPermissionRequired",
+  folder_setup_required: "startDownloadError_folderSetupRequired",
   durable_state_failure: "startDownloadError_durableStateFailure",
   unknown: "sidepanel_enqueueFailed",
 }

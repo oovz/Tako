@@ -523,6 +523,28 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "control-ready",
   }),
+  VERIFY_FOLDER_SETUP: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("VERIFY_FOLDER_SETUP"),
+      payload: z.strictObject({
+        handleId: z.string().min(1).max(256),
+        afterApproval: z.literal(true).optional(),
+      }),
+    }),
+    response: z.union([
+      z.strictObject({ success: z.literal(true) }),
+      z.strictObject({
+        success: z.literal(false),
+        reason: z.enum(["other_tabs", "downloads_active", "unavailable"]),
+      }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["options"],
+    readiness: "runtime-ready",
+  }),
   GET_PERSISTENT_ERRORS: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),

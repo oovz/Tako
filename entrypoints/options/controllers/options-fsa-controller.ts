@@ -5,8 +5,11 @@ import {
   type DirHandle,
 } from "@/src/storage/fs-access"
 import { refreshFolderActionItem } from "@/src/runtime/refresh-folder-action-item"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 
-type DirectoryPicker = () => Promise<FileSystemDirectoryHandle>
+type DirectoryPicker = (options: {
+  mode: "readwrite"
+}) => Promise<FileSystemDirectoryHandle>
 
 export type FolderAccessResult =
   | { status: "missing" }
@@ -35,23 +38,33 @@ export class OptionsFsaController {
     const picker = getDirectoryPicker()
     if (!picker) return { status: "unsupported" }
 
-    const handle = await picker().catch((error: unknown) => {
-      const normalized = error as { name?: string; code?: number }
-      if (
-        normalized &&
-        (normalized.name === "AbortError" || normalized.code === 20)
-      ) {
-        return null
+    const handle = await picker({ mode: "readwrite" }).catch(
+      (error: unknown) => {
+        const normalized = error as { name?: string; code?: number }
+        if (
+          normalized &&
+          (normalized.name === "AbortError" || normalized.code === 20)
+        ) {
+          return null
+        }
+        throw error
       }
-      throw error
-    })
+    )
     if (!handle) return { status: "aborted" }
     if (!(await verifyPermission(handle, true))) return { status: "denied" }
     return { status: "granted", handle }
   }
 
   async stage(handle: DirHandle, handleId: string): Promise<void> {
-    await saveDownloadRootHandle(handle, handleId)
+    await saveDownloadRootHandle(handle, handleId, { setupRequired: true })
+  }
+
+  verifyFolderSetup(handleId: string, afterApproval: boolean) {
+    return sendRuntimeMessage({
+      target: "background",
+      type: "VERIFY_FOLDER_SETUP",
+      payload: { handleId, ...(afterApproval ? { afterApproval: true } : {}) },
+    })
   }
 
   async grantSavedAccess(

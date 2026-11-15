@@ -92,6 +92,21 @@
   html:not([data-tako-motion="reduce"]) .tako-options .options-history-bar {
     transition: transform var(--options-disclosure) var(--options-ease);
   }
+  html:not([data-tako-motion="reduce"])
+    .tako-options
+    .options-folder-setup-choice {
+    animation: options-folder-setup-choice-in 320ms var(--options-ease);
+  }
+}
+@keyframes options-folder-setup-choice-in {
+  from {
+    opacity: 0.55;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes options-section-in {
   from {

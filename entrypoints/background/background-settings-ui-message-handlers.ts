@@ -3,6 +3,7 @@ import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repo
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 import { reconcileFsaDestinationActionItem } from "./options-action-item-reconcile"
 import { openOptionsTab } from "./open-options-tab"
+import { verifyFolderSetup } from "./folder-setup"
 
 type SettingsUiMessageType =
   | "GET_SITE_INTEGRATION_ENABLEMENT"
@@ -10,6 +11,7 @@ type SettingsUiMessageType =
   | "SAVE_OPTIONS_CONFIGURATION"
   | "GET_UI_PREFERENCES"
   | "REFRESH_FOLDER_ACTION_ITEM"
+  | "VERIFY_FOLDER_SETUP"
   | "GET_PERSISTENT_ERRORS"
   | "CLEAR_PERSISTED_DOWNLOAD_HISTORY"
   | "ACKNOWLEDGE_ERROR"
@@ -45,6 +47,8 @@ export function createBackgroundSettingsUiMessageHandlers(
       })
       return { success: true }
     },
+    VERIFY_FOLDER_SETUP: (message, sender) =>
+      verifyFolderSetup(deps, message.payload, sender),
     GET_PERSISTENT_ERRORS: async () => ({
       success: true,
       data: await persistentErrorsRepository.getAll(),

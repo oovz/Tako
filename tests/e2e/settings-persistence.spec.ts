@@ -102,8 +102,15 @@ async function readPersistedDirectoryName(page: Page): Promise<string | null> {
           (resolve, reject) => {
             const transaction = database.transaction(storeName, "readonly")
             const request = transaction.objectStore(storeName).get(handleId)
-            request.onsuccess = () =>
-              resolve(request.result as FileSystemDirectoryHandle | undefined)
+            request.onsuccess = () => {
+              const stored = request.result as
+                | FileSystemDirectoryHandle
+                | { setupRequired: true; handle: FileSystemDirectoryHandle }
+                | undefined
+              resolve(
+                stored && "setupRequired" in stored ? stored.handle : stored
+              )
+            }
             request.onerror = () =>
               reject(
                 request.error ??
@@ -539,6 +546,46 @@ test.describe("Settings across pages", () => {
 })
 
 test.describe("Destination saves across Options closure", () => {
+  test("shows the saved folder is ready after Continue setup returns to Options", async ({
+    page,
+    extensionId,
+  }) => {
+    const options = new OptionsPageObject(page, extensionId)
+    await options.navigate()
+    await options.switchToSection("storage")
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory()
+      const handle = await root.getDirectoryHandle("Tako download folder", {
+        create: true,
+      })
+      Object.defineProperty(window, "showDirectoryPicker", {
+        configurable: true,
+        value: async () => handle,
+      })
+    })
+    await page.getByRole("button", { name: "Select folder" }).click()
+    await options.saveSettings()
+
+    const continueSetup = page.getByRole("button", { name: "Continue setup" })
+    const permissionChoice = await page.evaluate(() =>
+      chrome.i18n.getMessage("options_folderSetupAlwaysAllow")
+    )
+    await expect(
+      page.getByText("Finish setup before downloading to this folder.", {
+        exact: false,
+      })
+    ).toBeVisible()
+    await expect(
+      page.getByText(permissionChoice, { exact: true })
+    ).toBeVisible()
+    await continueSetup.click()
+
+    const ready = page.getByRole("status").filter({ hasText: "Folder ready." })
+    await expect(ready).toBeVisible()
+    await expect(continueSetup).toHaveCount(0)
+    await expect(page).toHaveURL(/options\.html\?tab=storage$/)
+  })
+
   for (const boundary of ["before-commit", "after-commit"] as const) {
     test(`recovers the matching saved folder ${boundary}`, async ({
       page,

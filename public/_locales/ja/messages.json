@@ -697,6 +697,44 @@
   "options_savedFolderRepairRequired": {
     "message": "保存先フォルダーへのアクセスが必要です。再度アクセスを許可するか、フォルダーを選択してください。"
   },
+  "options_folderSetupTitle": {
+    "message": "フォルダーの設定を完了"
+  },
+  "options_folderSetupInstructions": {
+    "message": "このフォルダへのダウンロードを始める前に設定を完了してください。このタブは一時的に別のページに切り替わり、自動で戻ります。Chrome が再度アクセスを求めたら、$CHOICE$を選んでください。",
+    "placeholders": {
+      "choice": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_folderSetupReady": {
+    "message": "フォルダの設定が完了しました。オプションを閉じてもダウンロードを続けられます。"
+  },
+  "options_folderSetupAlwaysAllow": {
+    "message": "サイトアクセス時は常に許可"
+  },
+  "options_folderSetupFinish": {
+    "message": "設定を続ける"
+  },
+  "options_folderSetupRequestAccess": {
+    "message": "Chrome の権限確認を開く"
+  },
+  "options_folderSetupSaveChanges": {
+    "message": "続行するには、他の変更を保存するか破棄してください。"
+  },
+  "options_folderSetupOtherTabs": {
+    "message": "他の Tako タブを閉じてから、もう一度お試しください。"
+  },
+  "options_folderSetupDownloadsActive": {
+    "message": "フォルダーへのダウンロードが完了してから、もう一度お試しください。"
+  },
+  "options_folderSetupUnavailable": {
+    "message": "フォルダーへの継続的なアクセスを確認できませんでした。もう一度お試しください。"
+  },
+  "options_folderSetupTemporary": {
+    "message": "Chrome で一時的なアクセスが許可されました。確認を開き、「サイトアクセス時は常に許可」を選んでください。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "ダウンロードフォルダーが選択されていません"
   },
@@ -1735,6 +1773,9 @@
   },
   "startDownloadError_hostPermissionRequired": {
     "message": "このサイトへのアクセス権限がありません。権限を許可してもう一度お試しください。"
+  },
+  "startDownloadError_folderSetupRequired": {
+    "message": "オプションの「ストレージとファイル」でダウンロードフォルダーの設定を完了してください。"
   },
   "startDownloadError_durableStateFailure": {
     "message": "ダウンロードをキューに保存できませんでした。もう一度お試しください。"

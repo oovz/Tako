@@ -67,12 +67,13 @@ interface GrantOptions extends FolderActionLifetime {
   handleId: string | null
   isCurrent: (owner: SavedFolderOwner) => boolean
   onGranted: (handle: DirHandle) => void
+  deferSuccessFeedback?: boolean
 }
 
 function applyFolderAccess(
   result: FolderAccessResult,
   owner: SavedFolderOwner,
-  onGranted: GrantOptions["onGranted"]
+  options: Pick<GrantOptions, "onGranted" | "deferSuccessFeedback">
 ): boolean {
   if (result.status === "missing") {
     toast.error(t("settings_customFolderRequired"))
@@ -83,8 +84,8 @@ function applyFolderAccess(
     return false
   }
   owner.accessRevision++
-  onGranted(result.handle)
-  toast.success(t("folderAccess_granted"))
+  options.onGranted(result.handle)
+  if (!options.deferSuccessFeedback) toast.success(t("folderAccess_granted"))
   return true
 }
 
@@ -107,7 +108,7 @@ export async function grantOptionsFolderAccess(
   try {
     const result = await options.controller.grantSavedAccess(options.handleId)
     if (!options.isCurrent(owner)) return false
-    return applyFolderAccess(result, owner, options.onGranted)
+    return applyFolderAccess(result, owner, options)
   } catch (error) {
     if (!options.isCurrent(owner)) return false
     logger.error("[OPTIONS] Failed to grant custom-folder access:", error)

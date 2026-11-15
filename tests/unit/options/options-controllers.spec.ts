@@ -536,12 +536,19 @@ describe("Options host-permission and FSA controllers", () => {
       status: "granted",
       handle,
     })
+    expect(picker).toHaveBeenCalledWith({ mode: "readwrite" })
     await expect(controller.grantSavedAccess()).resolves.toEqual({
       status: "granted",
       handle,
     })
     await controller.stage(handle, "staged-folder")
-    expect(saveDownloadRootHandle).toHaveBeenCalledWith(handle, "staged-folder")
+    expect(saveDownloadRootHandle).toHaveBeenCalledWith(
+      handle,
+      "staged-folder",
+      {
+        setupRequired: true,
+      }
+    )
   })
 
   it("stages independent capabilities without overwriting the saved folder", async () => {
@@ -554,11 +561,19 @@ describe("Options host-permission and FSA controllers", () => {
     await controller.stage(first, "first-id")
     await controller.stage(second, "second-id")
 
-    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(1, first, "first-id")
+    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(
+      1,
+      first,
+      "first-id",
+      {
+        setupRequired: true,
+      }
+    )
     expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(
       2,
       second,
-      "second-id"
+      "second-id",
+      { setupRequired: true }
     )
   })
 

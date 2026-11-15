@@ -23,6 +23,7 @@ import {
 import { getDefinition, isEnabled } from "@/src/site-integrations/catalog"
 import { hasIntegrationHostPermission } from "@/src/site-integrations/host-permission-service"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
+import { readFolderSetupRequired } from "@/src/storage/fs-access"
 import {
   type CancelTaskResult,
   DownloadTaskCancellationCoordinator,
@@ -153,6 +154,17 @@ export class QueueApplicationCommands {
         taskId: commandId,
         now: Date.now(),
       })
+      const destination = task.settingsSnapshot.destination
+      if (
+        destination.kind === "file-system-access" &&
+        destination.handleId !== null &&
+        (await readFolderSetupRequired(destination.handleId))
+      ) {
+        throw rejected(
+          "folder_setup_required",
+          "Finish setting up the download folder in Options"
+        )
+      }
       const enqueue = await this.deps.queueRepository.enqueueDownloadTask(task)
       if (enqueue.outcome !== "applied") {
         const existing = await this.deps.queueRepository.getTask(commandId)

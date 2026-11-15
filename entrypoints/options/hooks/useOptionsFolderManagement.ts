@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState, type RefObject } from "react"
+import { toast } from "sonner"
 import type { DirHandle } from "@/src/storage/fs-access"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import { t } from "@/src/runtime/i18n"
 import type { OptionsFsaController } from "../controllers/options-fsa-controller"
+import { folderSetupMessage } from "../folder-setup-feedback"
 import { useOptionsSavedFolder } from "./useOptionsFolderManagement-saved"
 import {
   grantOptionsFolderAccess,
@@ -14,6 +17,7 @@ export interface UseOptionsFolderManagementOptions {
   savedHandleId: string | null
   settingsBuffer: ExtensionSettings | null
   onSettingsChange: (updates: Partial<ExtensionSettings>) => void
+  canVerifyFolderSetup: () => boolean
 }
 
 function useFolderActionLifetime(isSavingRef: RefObject<boolean>) {
@@ -57,8 +61,8 @@ export function useOptionsFolderManagement(
       }),
     [begin, end, fsaController, settingsBuffer, onSettingsChange]
   )
-  const grantDownloadFolderAccess = useCallback(
-    () =>
+  const grantSavedFolder = useCallback(
+    (deferSuccessFeedback = false) =>
       grantOptionsFolderAccess({
         begin,
         end,
@@ -66,6 +70,7 @@ export function useOptionsFolderManagement(
         handleId: savedHandleId,
         owner: savedFolderOwner.current,
         isCurrent: (owner) => savedFolderOwner.current === owner,
+        deferSuccessFeedback,
         onGranted: (handle) => {
           setSavedFolderHandle(handle)
           setFolderAccessRequired(false)
@@ -81,6 +86,42 @@ export function useOptionsFolderManagement(
       setFolderAccessRequired,
     ]
   )
+
+  async function finishFolderSetup(): Promise<void> {
+    const owner = savedFolderOwner.current
+    const canVerify = () =>
+      savedFolderOwner.current === owner && options.canVerifyFolderSetup()
+    if (
+      !savedHandleId ||
+      !owner ||
+      owner.handleId !== savedHandleId ||
+      !saved.folderSetupRequired ||
+      pendingFolderHandle ||
+      !canVerify()
+    )
+      return
+
+    const afterApproval = saved.folderAccessRequired
+    if (afterApproval && !(await grantSavedFolder(true))) return
+    if (!canVerify() || !begin()) return
+    try {
+      const result = await fsaController.verifyFolderSetup(
+        savedHandleId,
+        afterApproval
+      )
+      if (!result.success && savedFolderOwner.current === owner) {
+        toast.error(
+          t(folderSetupMessage("reason" in result ? result.reason : undefined))
+        )
+      }
+    } catch {
+      if (savedFolderOwner.current === owner)
+        toast.error(t(folderSetupMessage(undefined)))
+    } finally {
+      end()
+    }
+  }
+
   return {
     savedFolderHandle: saved.savedFolderHandle,
     setSavedFolderHandle,
@@ -94,6 +135,10 @@ export function useOptionsFolderManagement(
     folderAccessRequired:
       saved.folderAccessRequired && pendingFolderHandle === null,
     pickDownloadFolder,
-    grantDownloadFolderAccess,
+    grantDownloadFolderAccess: () => grantSavedFolder(),
+    folderSetup:
+      savedHandleId && saved.folderSetupRequired && pendingFolderHandle === null
+        ? { handleId: savedHandleId, finish: finishFolderSetup }
+        : undefined,
   }
 }

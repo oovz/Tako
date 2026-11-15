@@ -2,7 +2,10 @@
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { DownloadDestinationSection } from "@/entrypoints/options/components/DownloadDestinationSection"
+import {
+  DownloadDestinationSection,
+  type DownloadDestinationSectionProps,
+} from "@/entrypoints/options/components/DownloadDestinationSection"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { t } from "@/src/runtime/i18n"
 
@@ -53,7 +56,7 @@ function props(destination: "downloads-api" | "file-system-access") {
     onPickFolder: vi.fn(async () => undefined),
   }
 }
-async function render(properties: ReturnType<typeof props>) {
+async function render(properties: DownloadDestinationSectionProps) {
   await act(async () =>
     root.render(createElement(DownloadDestinationSection, properties))
   )
@@ -105,6 +108,66 @@ it("starts folder selection and permission renewal directly from their user cont
   expect(properties.onDownloadsChange).toHaveBeenLastCalledWith({
     allowChromeFallback: !DEFAULT_SETTINGS.downloads.allowChromeFallback,
   })
+})
+
+it("returns the user to the Chrome prompt after a temporary folder grant", async () => {
+  const previousUrl = window.location.href
+  window.history.replaceState(null, "", "?tab=storage&folder-setup=temporary")
+  const properties = props("file-system-access")
+  const finish = vi.fn(async () => {})
+  try {
+    await render({
+      ...properties,
+      folderSetup: { handleId: "captured", disabled: true, finish },
+    })
+    const label = t("options_folderSetupRequestAccess")
+    expect(button(label).disabled).toBe(true)
+    expect(container.textContent).toContain(t("options_folderSetupAlwaysAllow"))
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      t("options_folderSetupTemporary")
+    )
+    expect(window.location.search).toBe("?tab=storage")
+
+    await render({
+      ...properties,
+      folderSetup: { handleId: "captured", disabled: false, finish },
+    })
+    await act(async () => button(label).click())
+    expect(finish).toHaveBeenCalledOnce()
+    expect(properties.onGrantFolderAccess).not.toHaveBeenCalled()
+  } finally {
+    window.history.replaceState(null, "", previousUrl)
+  }
+})
+
+it("shows setup success for the verified folder until a different folder is selected", async () => {
+  const previousUrl = window.location.href
+  window.history.replaceState(
+    null,
+    "",
+    "?tab=storage&folder-setup=ready&folder-setup-handle=captured"
+  )
+  const properties = props("file-system-access")
+  try {
+    await render({ ...properties, selectedFolderName: null })
+    expect(container.querySelector('[role="status"]')).toBeNull()
+
+    await render({ ...properties, folderAccessRequired: false })
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      t("options_folderSetupReady")
+    )
+    expect(window.location.search).toBe("?tab=storage")
+
+    await render({
+      ...properties,
+      folderAccessRequired: false,
+      selectedFolderName: "Other folder",
+      downloads: { ...properties.downloads, customDirectoryHandleId: null },
+    })
+    expect(container.querySelector('[role="status"]')).toBeNull()
+  } finally {
+    window.history.replaceState(null, "", previousUrl)
+  }
 })
 
 it.each(Object.keys(capabilities) as (keyof typeof capabilities)[])(

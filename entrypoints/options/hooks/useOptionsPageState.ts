@@ -57,6 +57,13 @@ export function useOptionsPageState() {
     settingsBuffer: draft.settingsBuffer,
     savedHandleId: saved.settings?.downloads.customDirectoryHandleId ?? null,
     onSettingsChange: edits.handleSettingsChange,
+    canVerifyFolderSetup: () => {
+      const current = binding.configurationRef.current
+      return (
+        current.externalChangeKeys.length === 0 &&
+        !optionsHasUnsavedChanges(current, false)
+      )
+    },
   })
   const hasUnsavedChanges = optionsHasUnsavedChanges(
     configuration,
@@ -85,6 +92,7 @@ export function useOptionsPageState() {
     historySeries: history.historySeries,
     selectedFolderName: folder.selectedFolderName,
     folderAccessRequired: folder.folderAccessRequired,
+    folderSetup: folder.folderSetup,
     isLoading: configuration.hydration.status === "loading",
     loadFailed: configuration.hydration.status === "error",
     ...save,
