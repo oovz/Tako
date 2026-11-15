@@ -9,6 +9,7 @@ import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/o
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import type {
   ActiveDispatchLease,
   DownloadTaskState,
@@ -125,8 +126,8 @@ function task(id: string): DownloadTaskState {
     chapters: [],
     status: "queued",
     created: 1,
-    settingsSnapshot: {},
-  } as unknown as DownloadTaskState
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
+  }
 }
 
 function pendingAction(type: PendingUndoAction["type"]): PendingUndoAction {
