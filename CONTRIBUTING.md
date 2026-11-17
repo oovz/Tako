@@ -60,13 +60,23 @@ Use `pnpm test:e2e:headed` to run the same tests with a visible browser.
 
 ### E2E diagnostics
 
-Run a failing spec with diagnostics to collect browser and extension logs:
+Start with the Playwright console, page errors, and network events when debugging a running extension. Run a failing spec with diagnostics to collect those events and save retained extension history:
 
 ```sh
 pnpm test:e2e:diag tests/e2e/mangadex-sidepanel-navigation.spec.ts
 ```
 
-For live tests, set `TMD_TEST_E2E_DIAG=true`. Diagnostics redact sensitive fields, but can still contain browsing context and free text. Review logs and attachments before sharing them.
+For live tests, set `TMD_TEST_E2E_DIAG=true`. On failures and diagnostic runs, the fixture attempts to save `retained-diagnostics.json` before closing the browser profile when it knows the extension ID. The report requires access to the profile’s diagnostic store.
+
+Playwright console-message tools show live console output. To inspect earlier entries, use the fixture's existing `context` and `extensionId` with the retained report helper:
+
+```ts
+import { readRetainedDiagnostics } from "./fixtures/retained-diagnostics"
+
+const report = await readRetainedDiagnostics(context, extensionId)
+```
+
+The helper opens Options → Diagnostics in the running profile and returns its exported JSON, bounded by the local retention limit. Pass a third argument, such as `testInfo.outputPath("diagnostics.json")`, to save the file before profile cleanup. When using an interactive Playwright session, open `chrome-extension://<extension-id>/options.html?tab=diagnostics` in that same browser context and choose **Export JSON**. This can retrieve committed entries after a producer closes or when background initialization fails. Review logs and attachments for titles, URL paths, and free text before sharing.
 
 ### Live chapter validation
 

@@ -3,6 +3,7 @@ import {
   chromium,
   type BrowserContext,
   type Page,
+  type TestInfo,
   type Worker,
 } from "@playwright/test"
 import os from "node:os"
@@ -47,6 +48,7 @@ import {
 } from "../../../src/runtime/diagnostic-redaction"
 
 import { installContextDiagnostics } from "./diagnostics"
+import { attachRetainedDiagnostics } from "./retained-diagnostics"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
@@ -314,8 +316,32 @@ export async function teardownExtensionResources(
   }
 }
 
+export async function launchExtensionProfile(
+  userDataDir: string,
+  testInfoHeadless = true
+): Promise<BrowserContext> {
+  return chromium.launchPersistentContext(userDataDir, {
+    channel: e2eBrowserChannel,
+    headless: testInfoHeadless,
+    args: [
+      `--disable-extensions-except=${pathToExtension}`,
+      `--load-extension=${pathToExtension}`,
+      "--no-sandbox",
+      "--no-focus-on-launch",
+      "--lang=en-US",
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+      // Permit fixture redirects to loopback without an interactive LNA prompt.
+      // See https://developer.chrome.com/blog/local-network-access.
+      "--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests",
+    ],
+  })
+}
+
 async function setupExtensionContext(
-  testInfoHeadless: boolean
+  testInfoHeadless: boolean,
+  testInfo: TestInfo
 ): Promise<ExtensionContextState> {
   const userDataDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tmd-playwright-")
@@ -341,6 +367,7 @@ async function setupExtensionContext(
   let dnrRulesToInstall: DnrRedirectRule[] = []
   let contextForCleanup: BrowserContext | undefined
   let backgroundWorkerForCleanup: Worker | undefined
+  let extensionIdForCleanup: string | undefined
 
   try {
     if (shouldUseMockRoutes) {
@@ -368,23 +395,7 @@ async function setupExtensionContext(
       ]
     }
 
-    const context = await chromium.launchPersistentContext(userDataDir, {
-      channel: e2eBrowserChannel,
-      headless: testInfoHeadless,
-      args: [
-        `--disable-extensions-except=${pathToExtension}`,
-        `--load-extension=${pathToExtension}`,
-        "--no-sandbox",
-        "--no-focus-on-launch",
-        "--lang=en-US",
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-        "--disable-backgrounding-occluded-windows",
-        // Permit fixture redirects to loopback without an interactive LNA prompt.
-        // See https://developer.chrome.com/blog/local-network-access.
-        "--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests",
-      ],
-    })
+    const context = await launchExtensionProfile(userDataDir, testInfoHeadless)
     contextForCleanup = context
     if (collectDiagnostics) installContextDiagnostics(context)
 
@@ -421,6 +432,8 @@ async function setupExtensionContext(
         "Resolved service worker but failed to derive extension ID"
       )
     }
+
+    extensionIdForCleanup = extensionId
 
     if (shouldUseMockRoutes || shouldEnableLiveIntegrations) {
       const testEnablement = Object.fromEntries(
@@ -461,6 +474,13 @@ async function setupExtensionContext(
       teardown,
     }
   } catch (setupError) {
+    if (contextForCleanup && extensionIdForCleanup) {
+      await attachRetainedDiagnostics(
+        contextForCleanup,
+        extensionIdForCleanup,
+        testInfo
+      )
+    }
     try {
       await teardownExtensionResources({
         context: contextForCleanup,
@@ -490,10 +510,17 @@ export const test = base.extend<{
   _extensionContextState: async ({}, use, testInfo) => {
     // Respect the configured headless mode and the CLI --headed override.
     const headless = testInfo.project.use.headless ?? true
-    const state = await setupExtensionContext(headless)
+    const state = await setupExtensionContext(headless, testInfo)
     try {
       await use(state)
     } finally {
+      if (collectDiagnostics || testInfo.status !== testInfo.expectedStatus) {
+        await attachRetainedDiagnostics(
+          state.context,
+          state.extensionId,
+          testInfo
+        )
+      }
       await state.teardown()
     }
   },
@@ -517,3 +544,34 @@ export const test = base.extend<{
 })
 
 export const expect = test.expect
+
+export async function stopBackgroundWorker(
+  context: BrowserContext,
+  panel: Page,
+  extensionId: string
+): Promise<void> {
+  const session = await context.newCDPSession(panel)
+  let runningVersionId: string | undefined
+  const stoppedVersions = new Set<string>()
+  session.on("ServiceWorker.workerVersionUpdated", ({ versions }) => {
+    for (const version of versions) {
+      if (
+        version.scriptURL !== `chrome-extension://${extensionId}/background.js`
+      )
+        continue
+      if (version.runningStatus === "running")
+        runningVersionId = version.versionId
+      if (version.runningStatus === "stopped")
+        stoppedVersions.add(version.versionId)
+    }
+  })
+  try {
+    await session.send("ServiceWorker.enable")
+    await expect.poll(() => runningVersionId).toBeTruthy()
+    const versionId = runningVersionId!
+    await session.send("ServiceWorker.stopWorker", { versionId })
+    await expect.poll(() => stoppedVersions.has(versionId)).toBe(true)
+  } finally {
+    await session.detach()
+  }
+}

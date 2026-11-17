@@ -1,6 +1,11 @@
-import type { BrowserContext, Locator, Page, Worker } from "@playwright/test"
+import type { Locator, Page, Worker } from "@playwright/test"
 import { readFileSync } from "node:fs"
-import { test, expect, resolveBackgroundWorker } from "./fixtures/extension"
+import {
+  test,
+  expect,
+  resolveBackgroundWorker,
+  stopBackgroundWorker,
+} from "./fixtures/extension"
 import { buildExampleUrl } from "./fixtures/test-domains-constants"
 import {
   getSessionState,
@@ -113,37 +118,6 @@ function recentChapter(
     saveConfirmedAt: savedAt,
     outputDestination: "downloads-api",
     format: "cbz",
-  }
-}
-
-async function stopBackgroundWorker(
-  context: BrowserContext,
-  panel: Page,
-  extensionId: string
-): Promise<void> {
-  const session = await context.newCDPSession(panel)
-  let runningVersionId: string | undefined
-  const stoppedVersions = new Set<string>()
-  session.on("ServiceWorker.workerVersionUpdated", ({ versions }) => {
-    for (const version of versions) {
-      if (
-        version.scriptURL !== `chrome-extension://${extensionId}/background.js`
-      )
-        continue
-      if (version.runningStatus === "running")
-        runningVersionId = version.versionId
-      if (version.runningStatus === "stopped")
-        stoppedVersions.add(version.versionId)
-    }
-  })
-  try {
-    await session.send("ServiceWorker.enable")
-    await expect.poll(() => runningVersionId).toBeTruthy()
-    const versionId = runningVersionId!
-    await session.send("ServiceWorker.stopWorker", { versionId })
-    await expect.poll(() => stoppedVersions.has(versionId)).toBe(true)
-  } finally {
-    await session.detach()
   }
 }
 
