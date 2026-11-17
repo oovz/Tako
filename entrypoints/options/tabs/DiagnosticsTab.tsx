@@ -15,6 +15,7 @@ import {
   type DiagnosticCursor,
   type DiagnosticEntry,
 } from "@/src/runtime/diagnostic-store"
+import { DiagnosticExportButton } from "../components/DiagnosticExportButton"
 import { ClearHistoryDialog } from "../components/ClearHistoryDialog"
 import { useDiagnosticPage } from "../hooks/useDiagnosticPage"
 
@@ -219,7 +220,7 @@ export function DiagnosticsTab() {
           {t("diagnostics_title")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {t("diagnostics_description")}
+          {t("diagnostics_description")} {t("diagnostics_sharing")}
         </p>
       </header>
       {level === null && (
@@ -255,6 +256,7 @@ export function DiagnosticsTab() {
         >
           {t("diagnostics_clear")}
         </Button>
+        <DiagnosticExportButton query={query} />
       </div>
       {failed && <p role="alert">{t("diagnostics_unavailable")}</p>}
       {!failed && !page && <p role="status">{t("diagnostics_loading")}</p>}

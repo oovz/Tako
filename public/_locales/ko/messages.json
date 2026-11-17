@@ -2417,5 +2417,17 @@
   },
   "diagnostics_older": {
     "message": "이전 로그"
+  },
+  "diagnostics_export": {
+    "message": "JSON 내보내기"
+  },
+  "diagnostics_exporting": {
+    "message": "내보내는 중…"
+  },
+  "diagnostics_exportFailed": {
+    "message": "진단 보고서를 내보내지 못했습니다. 다시 시도하세요."
+  },
+  "diagnostics_sharing": {
+    "message": "공유하기 전에 보고서를 검토하세요."
   }
 }

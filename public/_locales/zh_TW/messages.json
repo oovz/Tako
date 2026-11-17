@@ -2405,5 +2405,17 @@
   },
   "diagnostics_older": {
     "message": "較舊的記錄"
+  },
+  "diagnostics_export": {
+    "message": "匯出 JSON"
+  },
+  "diagnostics_exporting": {
+    "message": "正在匯出…"
+  },
+  "diagnostics_exportFailed": {
+    "message": "無法匯出診斷報告。請再試一次。"
+  },
+  "diagnostics_sharing": {
+    "message": "分享前請先檢查報告內容。"
   }
 }

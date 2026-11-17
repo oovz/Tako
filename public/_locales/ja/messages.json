@@ -2405,5 +2405,17 @@
   },
   "diagnostics_older": {
     "message": "古いログへ"
+  },
+  "diagnostics_export": {
+    "message": "JSON をエクスポート"
+  },
+  "diagnostics_exporting": {
+    "message": "エクスポート中…"
+  },
+  "diagnostics_exportFailed": {
+    "message": "診断レポートをエクスポートできませんでした。もう一度お試しください。"
+  },
+  "diagnostics_sharing": {
+    "message": "共有する前にレポートの内容を確認してください。"
   }
 }

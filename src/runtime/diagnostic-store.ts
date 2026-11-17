@@ -297,3 +297,12 @@ function scanEntries(
     }
   })
 }
+
+/** A single read transaction freezes report selection at its storage boundary. */
+export async function readDiagnosticSnapshot(
+  query: DiagnosticQuery
+): Promise<DiagnosticEntry[]> {
+  return transact([ENTRIES], "readonly", (transaction) =>
+    scanEntries(transaction.objectStore(ENTRIES), query, Infinity)
+  )
+}

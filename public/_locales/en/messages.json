@@ -2417,5 +2417,17 @@
   },
   "diagnostics_older": {
     "message": "Older entries"
+  },
+  "diagnostics_export": {
+    "message": "Export JSON"
+  },
+  "diagnostics_exporting": {
+    "message": "Exporting…"
+  },
+  "diagnostics_exportFailed": {
+    "message": "The diagnostic report could not be exported. Try again."
+  },
+  "diagnostics_sharing": {
+    "message": "Review the report before sharing it."
   }
 }

@@ -2405,5 +2405,17 @@
   },
   "diagnostics_older": {
     "message": "较旧的日志"
+  },
+  "diagnostics_export": {
+    "message": "导出 JSON"
+  },
+  "diagnostics_exporting": {
+    "message": "正在导出…"
+  },
+  "diagnostics_exportFailed": {
+    "message": "无法导出诊断报告。请重试。"
+  },
+  "diagnostics_sharing": {
+    "message": "分享前请检查报告内容。"
   }
 }
