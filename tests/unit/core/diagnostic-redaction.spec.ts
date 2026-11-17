@@ -237,3 +237,19 @@ describe("diagnostic redaction", () => {
     expect(safe).toEqual({ headers: [["content-type", "image/png"]] })
   })
 })
+
+it("bounds an oversized URL object before it can be buffered as a diagnostic", () => {
+  const url = new URL(
+    `https://example.com/${"x".repeat(1024 * 1024)}?token=SECRET`
+  )
+  expect(redactDiagnostic({ url })).toEqual({ url: "[REDACTED]" })
+})
+
+it("removes URL search and fragment from opaque URL objects", () => {
+  const url = new URL(
+    "mailto:reader@example.com?subject=PRIVATE_MARKER#PRIVATE_FRAGMENT"
+  )
+  expect(redactDiagnostic({ url })).toEqual({
+    url: "mailto:reader@example.com",
+  })
+})

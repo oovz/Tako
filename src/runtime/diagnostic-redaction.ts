@@ -7,6 +7,9 @@ const MAX_DIAGNOSTIC_DEPTH = 8
 const MAX_DIAGNOSTIC_OBJECT_KEYS = 100
 const MAX_DIAGNOSTIC_ARRAY_ITEMS = 100
 const MAX_DIAGNOSTIC_STRING_LENGTH = 2_000
+const MAX_DIAGNOSTIC_NODES = 1_000
+const MAX_DIAGNOSTIC_TEXT_LENGTH = 64 * 1024
+const MAX_DIAGNOSTIC_KEY_LENGTH = 256
 
 const URL_PATTERN =
   /\b(?:https?|wss?|ftp|file|chrome-extension):\/\/[^\s<>"'`]+/gi
@@ -38,6 +41,7 @@ const PATH_KEYS = new Set([
 type RedactionState = {
   depth: number
   seen: WeakSet<object>
+  budget: { nodes: number; text: number }
 }
 
 function normalizeKey(key: string): string {
@@ -206,13 +210,20 @@ function containsOpaqueDiagnostic(value: string): boolean {
   )
 }
 
-function redactString(value: string, state: RedactionState): string {
+function consumeTextBudget(value: string, state: RedactionState): boolean {
   if (
     value.length > MAX_DIAGNOSTIC_STRING_LENGTH ||
-    state.depth >= MAX_DIAGNOSTIC_DEPTH
+    state.depth >= MAX_DIAGNOSTIC_DEPTH ||
+    value.length > state.budget.text
   ) {
-    return REDACTED_DIAGNOSTIC_VALUE
+    return false
   }
+  state.budget.text -= value.length
+  return true
+}
+
+function redactString(value: string, state: RedactionState): string {
+  if (!consumeTextBudget(value, state)) return REDACTED_DIAGNOSTIC_VALUE
   const trimmed = value.trim()
   if (isSerializedDiagnostic(trimmed)) {
     try {
@@ -220,6 +231,7 @@ function redactString(value: string, state: RedactionState): string {
         redactValue(JSON.parse(trimmed), "", {
           depth: state.depth + 1,
           seen: state.seen,
+          budget: state.budget,
         })
       )
     } catch {
@@ -247,9 +259,16 @@ function redactHeaderValue(
 }
 
 function redactNativeHeaders(value: Headers, state: RedactionState): unknown {
-  const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = Object.create(null) as Record<
+    string,
+    unknown
+  >
   try {
+    let count = 0
     for (const [name, headerValue] of value.entries()) {
+      if (++count > MAX_DIAGNOSTIC_OBJECT_KEYS || state.budget.nodes-- <= 0)
+        break
+      if (name.length > MAX_DIAGNOSTIC_KEY_LENGTH) continue
       result[name] = redactHeaderValue(name, headerValue, state)
     }
   } catch {
@@ -285,10 +304,16 @@ function redactHeaderEntries(
   entries: Array<[string, string]>,
   state: RedactionState
 ): Array<[string, unknown]> {
-  return entries.map(([name, headerValue]) => [
-    name,
-    redactHeaderValue(name, headerValue, state),
-  ])
+  const result: Array<[string, unknown]> = []
+  for (const [name, value] of entries) {
+    if (state.budget.nodes-- <= 0) break
+    const boundedName =
+      name.length <= MAX_DIAGNOSTIC_KEY_LENGTH
+        ? name
+        : REDACTED_DIAGNOSTIC_VALUE
+    result.push([boundedName, redactHeaderValue(name, value, state)])
+  }
+  return result
 }
 
 function redactError(
@@ -304,18 +329,25 @@ function redactError(
   const childState: RedactionState = {
     depth: state.depth + 1,
     seen: state.seen,
+    budget: state.budget,
   }
 
   if (Object.hasOwn(value, "cause")) {
     result.cause = redactValue(
-      (value as Error & { cause?: unknown }).cause,
+      readProperty(value, "cause"),
       "cause",
       childState
     )
   }
 
   for (const key of Object.keys(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS)) {
-    if (key === "cause" || Object.hasOwn(result, key)) continue
+    if (state.budget.nodes <= 0) break
+    if (
+      key.length > MAX_DIAGNOSTIC_KEY_LENGTH ||
+      key === "cause" ||
+      Object.hasOwn(result, key)
+    )
+      continue
     result[key] = redactValue(readProperty(value, key), key, childState)
   }
   return result
@@ -327,6 +359,7 @@ function redactObjectProperty(
   state: RedactionState,
   headers: boolean
 ): unknown {
+  if (state.budget.nodes-- <= 0) return REDACTED_DIAGNOSTIC_VALUE
   if (isSensitiveKey(key) || isPathKey(key)) return REDACTED_DIAGNOSTIC_VALUE
   if (headers) return redactHeaderValue(key, readProperty(value, key), state)
   if (isHeadersKey(key)) return redactHeaders(readProperty(value, key), state)
@@ -347,8 +380,12 @@ function redactObject(
   const childState: RedactionState = {
     depth: state.depth + 1,
     seen: state.seen,
+    budget: state.budget,
   }
-  const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = Object.create(null) as Record<
+    string,
+    unknown
+  >
   let keys: string[]
   try {
     keys = Object.keys(value).slice(0, MAX_DIAGNOSTIC_OBJECT_KEYS)
@@ -356,6 +393,8 @@ function redactObject(
     return UNREADABLE_DIAGNOSTIC_VALUE
   }
   for (const key of keys) {
+    if (state.budget.nodes <= 0) break
+    if (key.length > MAX_DIAGNOSTIC_KEY_LENGTH) continue
     result[key] = redactObjectProperty(value, key, childState, headers)
   }
   return result
@@ -403,12 +442,13 @@ function redactArrayItems(value: unknown[], state: RedactionState): unknown {
   const childState: RedactionState = {
     depth: state.depth + 1,
     seen: state.seen,
+    budget: state.budget,
   }
   const length = readArrayLength(value)
   if (length === null) return UNREADABLE_DIAGNOSTIC_VALUE
   const items: unknown[] = []
   const limit = Math.min(length, MAX_DIAGNOSTIC_ARRAY_ITEMS)
-  for (let index = 0; index < limit; index += 1) {
+  for (let index = 0; index < limit && state.budget.nodes > 0; index += 1) {
     items.push(redactArrayItem(value, index, childState))
   }
   return items
@@ -422,7 +462,7 @@ function redactArray(value: unknown[], state: RedactionState): unknown {
   const headerEntry = inspectHeaderEntry(value)
   if (headerEntry.kind === "unreadable") return UNREADABLE_DIAGNOSTIC_VALUE
   if (headerEntry.kind === "entry" && isSensitiveHeader(headerEntry.name)) {
-    return [headerEntry.name, REDACTED_DIAGNOSTIC_VALUE]
+    return [redactString(headerEntry.name, state), REDACTED_DIAGNOSTIC_VALUE]
   }
   return redactArrayItems(value, state)
 }
@@ -438,7 +478,12 @@ function redactOpaqueOrRecord(value: object, state: RedactionState): unknown {
 }
 
 function redactObjectValue(value: object, state: RedactionState): unknown {
-  if (value instanceof URL) return redactUrl(value.toString())
+  if (value instanceof URL) {
+    const url = value.toString()
+    return consumeTextBudget(url, state)
+      ? redactUrl(url)
+      : REDACTED_DIAGNOSTIC_VALUE
+  }
   if (
     typeof URLSearchParams !== "undefined" &&
     value instanceof URLSearchParams
@@ -454,6 +499,7 @@ function redactValue(
   key: string,
   state: RedactionState
 ): unknown {
+  if (state.budget.nodes-- <= 0) return REDACTED_DIAGNOSTIC_VALUE
   if (isSensitiveKey(key) || isPathKey(key)) return REDACTED_DIAGNOSTIC_VALUE
   if (isHeadersKey(key)) return redactHeaders(value, state)
   return typeof value === "object" && value !== null
@@ -463,7 +509,15 @@ function redactValue(
 
 /** Convert an arbitrary diagnostic value into a bounded, redacted value. */
 export function redactDiagnostic(value: unknown): unknown {
-  return redactValue(value, "", { depth: 0, seen: new WeakSet<object>() })
+  try {
+    return redactValue(value, "", {
+      depth: 0,
+      seen: new WeakSet<object>(),
+      budget: { nodes: MAX_DIAGNOSTIC_NODES, text: MAX_DIAGNOSTIC_TEXT_LENGTH },
+    })
+  } catch {
+    return UNREADABLE_DIAGNOSTIC_VALUE
+  }
 }
 
 /** Format a diagnostic value after applying the same redaction boundary. */
