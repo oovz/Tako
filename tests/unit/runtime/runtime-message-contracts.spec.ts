@@ -61,6 +61,10 @@ const EXPECTED_RUNTIME_MESSAGES = {
   OFFSCREEN_DOWNLOAD_PROGRESS: "background|event|offscreen|runtime-ready",
   OFFSCREEN_INITIALIZATION_FAILED: "background|event|offscreen|control-ready",
   OFFSCREEN_STATUS: "offscreen|query|background|control-ready",
+  FLUSH_OFFSCREEN_DIAGNOSTICS: "offscreen|command|background|control-ready",
+  GET_DIAGNOSTIC_PREFERENCE: "background|query|offscreen|independent",
+  REFRESH_OFFSCREEN_DIAGNOSTIC_PREFERENCE:
+    "offscreen|event|background|independent",
   OFFSCREEN_QUERY_JOB: "offscreen|query|background|runtime-ready",
   OFFSCREEN_CANCEL_JOB: "offscreen|command|background|runtime-ready",
   REVOKE_BLOB_URL: "offscreen|command|background|runtime-ready",

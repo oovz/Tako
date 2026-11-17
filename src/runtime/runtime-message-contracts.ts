@@ -6,6 +6,7 @@ import {
   DownloadErrorCategorySchema,
   DownloadProgressStatusSchema,
   ImagePaddingDigitsSchema,
+  LogLevelSchema,
 } from "@/src/shared/download-contract"
 import { RATE_POLICY_LIMITS } from "@/src/shared/rate-policy-limits"
 import {
@@ -44,7 +45,11 @@ import {
 export type RuntimeMessageTarget = "background" | "offscreen"
 export type RuntimeMessageKind = "command" | "query" | "event"
 export type RuntimeMessageReadiness =
-  "control-ready" | "queue-hydrated" | "integrations-ready" | "runtime-ready"
+  | "independent"
+  | "control-ready"
+  | "queue-hydrated"
+  | "integrations-ready"
+  | "runtime-ready"
 export type RuntimeAllowedSender =
   "sidepanel" | "options" | "offscreen" | "background"
 export type RuntimeMessagePrincipal =
@@ -953,6 +958,48 @@ export const runtimeMessageRegistry = {
     target: "background",
     kind: "event",
     allowedSenders: ["offscreen"],
+    readiness: "control-ready",
+  }),
+  GET_DIAGNOSTIC_PREFERENCE: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("GET_DIAGNOSTIC_PREFERENCE"),
+    }),
+    response: z.union([
+      z.strictObject({
+        success: z.literal(true),
+        level: LogLevelSchema.nullable(),
+      }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "query",
+    allowedSenders: ["offscreen"],
+    readiness: "independent",
+  }),
+  REFRESH_OFFSCREEN_DIAGNOSTIC_PREFERENCE: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("REFRESH_OFFSCREEN_DIAGNOSTIC_PREFERENCE"),
+    }),
+    response: successOrFailure(),
+    target: "offscreen",
+    kind: "event",
+    allowedSenders: ["background"],
+    readiness: "independent",
+  }),
+  FLUSH_OFFSCREEN_DIAGNOSTICS: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("FLUSH_OFFSCREEN_DIAGNOSTICS"),
+      payload: z.strictObject({
+        documentInstanceId: z.string().min(1).optional(),
+      }),
+    }),
+    response: successOrFailure(),
+    target: "offscreen",
+    kind: "command",
+    allowedSenders: ["background"],
     readiness: "control-ready",
   }),
   OFFSCREEN_STATUS: defineRuntimeMessage({

@@ -1,3 +1,4 @@
+import { readStoredDiagnosticPreference } from "@/src/runtime/diagnostic-preference"
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
 import { createBackgroundQueueMessageHandlers } from "@/entrypoints/background/background-queue-message-handlers"
@@ -16,6 +17,10 @@ export function createBackgroundRuntimeMessageHandlers(
   }
 ): RuntimeMessageHandlerMap<"background"> {
   return {
+    GET_DIAGNOSTIC_PREFERENCE: async () => ({
+      success: true,
+      level: await readStoredDiagnosticPreference(),
+    }),
     GET_MANGAMILLION_DEVICE_TOKEN: async ({ rejectedToken }) => {
       const enablement = await deps.siteIntegrationEnablementService.getAll()
       if (!isEnabled("mangamillion", enablement)) {

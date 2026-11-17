@@ -1,22 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import {
-  applyAdvancedLoggerSettings,
-  logger,
-  setLoggerForceDebug,
-} from "@/src/runtime/logger"
-import type { AdvancedSettings } from "@/src/domain/settings/types"
-
-const baseSettings: AdvancedSettings = {
-  logLevel: "info",
-  storageCleanupDays: 30,
-}
-
-const makeSettings = (
-  overrides: Partial<AdvancedSettings>
-): AdvancedSettings => ({
-  ...baseSettings,
-  ...overrides,
-})
+import { applyDiagnosticLogLevel, logger } from "@/src/runtime/logger"
 
 describe("logger", () => {
   let debugSpy: ReturnType<typeof vi.spyOn>
@@ -29,8 +12,7 @@ describe("logger", () => {
     infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
-    setLoggerForceDebug(false)
-    applyAdvancedLoggerSettings(baseSettings)
+    applyDiagnosticLogLevel("info")
   })
 
   afterEach(() => {
@@ -38,11 +20,10 @@ describe("logger", () => {
     infoSpy.mockRestore()
     warnSpy.mockRestore()
     errorSpy.mockRestore()
-    setLoggerForceDebug(false)
   })
 
   it("respects logLevel setting", () => {
-    applyAdvancedLoggerSettings(makeSettings({ logLevel: "info" }))
+    applyDiagnosticLogLevel("info")
 
     logger.debug("debug message")
     logger.info("info message")
@@ -54,7 +35,7 @@ describe("logger", () => {
   })
 
   it("filters output based on logLevel", () => {
-    applyAdvancedLoggerSettings(makeSettings({ logLevel: "error" }))
+    applyDiagnosticLogLevel("error")
 
     logger.info("info message")
     logger.warn("warn message")
@@ -65,15 +46,17 @@ describe("logger", () => {
     expect(errorSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("forces debug logging when debug is forced", () => {
-    setLoggerForceDebug(true)
-    applyAdvancedLoggerSettings(makeSettings({ logLevel: "error" }))
-
+  it("applies the Warning fallback until a saved level can be read", () => {
+    applyDiagnosticLogLevel(null)
     logger.debug("debug message")
     logger.info("info message")
+    logger.warn("warn message")
+    logger.error("error message")
 
-    expect(debugSpy).toHaveBeenCalledTimes(1)
-    expect(infoSpy).toHaveBeenCalledTimes(1)
+    expect(debugSpy).not.toHaveBeenCalled()
+    expect(infoSpy).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalledTimes(1)
   })
 
   it("redacts diagnostic payloads before writing them to the console", () => {

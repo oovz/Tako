@@ -1,5 +1,6 @@
 import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
+import type { LogLevel } from "@/src/shared/download-contract"
 import { createDefaultSettings } from "@/src/domain/settings/defaults"
 import {
   cloneSettings,
@@ -17,11 +18,7 @@ export class SettingsRepository {
   private loadPromise: Promise<ExtensionSettings> | null = null
   private cacheGeneration = 0
   private readonly mutations = new StorageMutationQueue()
-  private readonly defaultLogLevel: "debug" | "warn"
-
-  constructor(defaultLogLevel: "debug" | "warn") {
-    this.defaultLogLevel = defaultLogLevel
-  }
+  constructor(private readonly defaultLogLevel?: LogLevel) {}
   async getSettings(): Promise<ExtensionSettings> {
     if (this.cache) return cloneSettings(this.cache)
     if (!this.loadPromise) {

@@ -335,7 +335,9 @@ describe("recoverFromLivenessTimeout", () => {
         clearLease: lease,
       })
     )
-    expect(sendMessage).not.toHaveBeenCalled()
+    expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual([
+      "FLUSH_OFFSCREEN_DIAGNOSTICS",
+    ])
     expect(onRecover).toHaveBeenCalledOnce()
   })
 

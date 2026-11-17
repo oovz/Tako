@@ -283,7 +283,8 @@ test("keeps moving selection surfaces aligned after rapid changes and responsive
   await page.goto(`chrome-extension://${extensionId}/options.html?tab=general`)
   const navigation = page.getByRole("navigation", { name: "Tako Settings" })
   const info = page.getByRole("radio", { name: "Info", exact: true })
-  const feedback = await info.evaluate(async (button) => {
+  const warning = page.getByRole("radio", { name: "Warning", exact: true })
+  const feedback = await warning.evaluate(async (button) => {
     if (!(button instanceof HTMLButtonElement))
       throw new Error("Expected a radio button")
     button.click()

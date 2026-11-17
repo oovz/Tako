@@ -1,19 +1,17 @@
 // Lightweight structured logger for browser contexts
-import type { AdvancedSettings } from "@/src/domain/settings/types"
 import {
   redactDiagnostic,
   redactDiagnosticText,
 } from "@/src/runtime/diagnostic-redaction"
 
-type LogLevel = "debug" | "info" | "warn" | "error"
-
-type LoggerConfig = {
-  minLevel: LogLevel
-}
+import type { LogLevel } from "@/src/shared/download-contract"
+import type { DiagnosticContext } from "./diagnostic-store"
+import { createDiagnosticWriter } from "./diagnostic-writer"
 
 type BufferedDebugEntry = {
   msg: string
   data: unknown
+  bufferedAt: number
   capturedAt: number
 }
 
@@ -24,37 +22,42 @@ const LEVEL_RANK: Record<LogLevel, number> = {
   error: 40,
 }
 
-// Ref: https://github.com/vitejs/vite/blob/main/docs/guide/env-and-mode.md
-// Vite injects import.meta.env in extension builds. Playwright also imports
-// runtime modules while collecting tests in Node, where that object is absent.
-const IS_DEV_BUILD =
-  typeof import.meta.env !== "undefined" && import.meta.env.DEV === true
-const DEFAULT_LOG_LEVEL: LogLevel = IS_DEV_BUILD ? "debug" : "warn"
+const DEFAULT_LOG_LEVEL: LogLevel = "warn"
 const MAX_PENDING_DEBUG_ENTRIES = 50
 
-let forceDebug = false
-let config: LoggerConfig = { minLevel: DEFAULT_LOG_LEVEL }
+let minLevel: LogLevel | null = null
+let recoverPreference: (() => void) | undefined
 let hasAppliedPersistedSettings = false
 let pendingDebugEntries: BufferedDebugEntry[] = []
+let writer: ReturnType<typeof createDiagnosticWriter> | undefined
 
-function writeToConsole(level: LogLevel, msg: string, data?: unknown): void {
-  const prefix = `[TMD] ${redactDiagnosticText(msg)}`
-  const payload =
-    data !== undefined ? [prefix, redactDiagnostic(data)] : [prefix]
-  switch (level) {
-    case "debug":
-      console.debug(...payload)
-      return
-    case "info":
-      console.info(...payload)
-      return
-    case "warn":
-      console.warn(...payload)
-      return
-    case "error":
-      console.error(...payload)
-      return
+export function startDiagnosticRecording(context: DiagnosticContext): void {
+  writer ??= createDiagnosticWriter(context)
+}
+
+export async function flushDiagnostics(): Promise<void> {
+  await writer?.flush()
+}
+
+export function setDiagnosticPreferenceRecovery(
+  recover: () => void
+): () => void {
+  recoverPreference = recover
+  return () => {
+    if (recoverPreference === recover) recoverPreference = undefined
   }
+}
+
+function emit(
+  level: LogLevel,
+  message: string,
+  details: unknown,
+  timestamp: number
+): void {
+  const prefix = `[TMD] ${message}`
+  if (details === undefined) console[level](prefix)
+  else console[level](prefix, details)
+  writer?.record(level, message, details, timestamp)
 }
 
 function appendPendingDebugEntry(msg: string, data: unknown): void {
@@ -64,7 +67,8 @@ function appendPendingDebugEntry(msg: string, data: unknown): void {
   pendingDebugEntries.push({
     msg: redactDiagnosticText(msg),
     data: redactDiagnostic(data),
-    capturedAt: performance.now(),
+    bufferedAt: performance.now(),
+    capturedAt: Date.now(),
   })
 }
 
@@ -90,68 +94,46 @@ function flushPendingDebugEntries(): void {
   const entries = pendingDebugEntries
   pendingDebugEntries = []
   for (const entry of entries) {
-    writeToConsole(
+    emit(
       "debug",
       entry.msg,
-      addBufferedTiming(entry.data, entry.capturedAt)
+      addBufferedTiming(entry.data, entry.bufferedAt),
+      entry.capturedAt
     )
   }
 }
 
 function settlePendingDebugEntries(): void {
-  if (config.minLevel === "debug") {
+  if (minLevel === "debug") {
     flushPendingDebugEntries()
     return
   }
   pendingDebugEntries = []
 }
 
-export function setLoggerForceDebug(value: boolean): void {
-  forceDebug = !!value
-  if (forceDebug) {
-    config = { minLevel: "debug" }
-    flushPendingDebugEntries()
-  }
-}
-
-export function computeLoggerConfig(advanced?: AdvancedSettings): LoggerConfig {
-  if (forceDebug) {
-    return { minLevel: "debug" }
-  }
-  const minLevel: LogLevel = advanced?.logLevel ?? "warn"
-  return { minLevel }
-}
-
-export function applyAdvancedLoggerSettings(advanced?: AdvancedSettings): void {
-  config = computeLoggerConfig(advanced)
+export function applyDiagnosticLogLevel(level: LogLevel | null): void {
+  minLevel = level
   hasAppliedPersistedSettings = true
   settlePendingDebugEntries()
 }
 
-export function configureLogger(next: Partial<LoggerConfig>): void {
-  config = { ...config, ...next }
-}
-
-export function isDebugLoggingEnabled(): boolean {
-  return config.minLevel === "debug"
-}
-
 function shouldWrite(level: LogLevel): boolean {
-  return LEVEL_RANK[level] >= LEVEL_RANK[config.minLevel]
+  return LEVEL_RANK[level] >= LEVEL_RANK[minLevel ?? DEFAULT_LOG_LEVEL]
 }
 
 function write(level: LogLevel, msg: string, data?: unknown) {
+  if (minLevel === null) recoverPreference?.()
   if (
     level === "debug" &&
     !hasAppliedPersistedSettings &&
-    !forceDebug &&
     !shouldWrite(level)
   ) {
     appendPendingDebugEntry(msg, data)
     return
   }
   if (!shouldWrite(level)) return
-  writeToConsole(level, msg, data)
+  const capturedAt = Date.now()
+  emit(level, redactDiagnosticText(msg), redactDiagnostic(data), capturedAt)
 }
 
 export const logger = {

@@ -118,7 +118,9 @@ export async function dispatchRuntimeMessage<
 
   const executeHandler = async (): Promise<unknown> => {
     try {
-      await options.waitForReadiness(entry.readiness)
+      if (entry.readiness !== "independent") {
+        await options.waitForReadiness(entry.readiness)
+      }
       const handler = options.handlers[
         type as RuntimeMessageTypesForTarget<TTarget>
       ] as unknown as (

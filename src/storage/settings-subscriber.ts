@@ -1,5 +1,5 @@
 import { applyUiLanguagePreference } from "@/src/runtime/i18n"
-import logger, { applyAdvancedLoggerSettings } from "@/src/runtime/logger"
+import logger from "@/src/runtime/logger"
 import {
   SETTINGS_STORAGE_KEY,
   type SettingsRepository,
@@ -43,6 +43,5 @@ export class SettingsSubscriber {
 export async function applySettingsSideEffects(
   settings: ExtensionSettings
 ): Promise<void> {
-  applyAdvancedLoggerSettings(settings.advanced)
   await applyUiLanguagePreference(settings.uiLanguage)
 }

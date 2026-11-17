@@ -1,3 +1,5 @@
+import { refreshOffscreenDiagnosticPreference } from "@/src/runtime/diagnostic-preference"
+import { flushDiagnostics } from "@/src/runtime/logger"
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
 import type {
   OffscreenInitializationState,
@@ -65,6 +67,20 @@ export function createOffscreenRuntimeMessageHandlers(
       success: true,
       ...(await worker.processDownloadChapter(message.payload)),
     }),
+    REFRESH_OFFSCREEN_DIAGNOSTIC_PREFERENCE: () => {
+      void refreshOffscreenDiagnosticPreference()
+      return { success: true }
+    },
+    FLUSH_OFFSCREEN_DIAGNOSTICS: async ({ payload }) => {
+      if (
+        payload.documentInstanceId &&
+        payload.documentInstanceId !== worker.documentInstanceId
+      ) {
+        return { success: false, error: "Offscreen document has changed" }
+      }
+      await flushDiagnostics()
+      return { success: true }
+    },
     OFFSCREEN_STATUS: () => ({
       success: true,
       initializationState: getInitializationState(),

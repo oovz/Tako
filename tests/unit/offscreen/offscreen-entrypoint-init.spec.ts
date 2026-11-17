@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/src/runtime/logger", () => ({
+vi.mock("@/src/runtime/logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/runtime/logger")>()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -48,6 +49,15 @@ describe("offscreen entrypoint initialization failure handling", () => {
       addEventListener: vi.fn(),
     } as unknown as Document)
 
+    const workerEvents = new EventTarget()
+    vi.stubGlobal(
+      "addEventListener",
+      workerEvents.addEventListener.bind(workerEvents)
+    )
+    vi.stubGlobal(
+      "removeEventListener",
+      workerEvents.removeEventListener.bind(workerEvents)
+    )
     vi.stubGlobal("window", globalThis as unknown as Window & typeof globalThis)
     vi.stubGlobal("HTMLElement", class {} as unknown as typeof HTMLElement)
     vi.stubGlobal(

@@ -1,3 +1,6 @@
+import { trackLocalDiagnosticPreference } from "@/src/runtime/diagnostic-preference"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { installDiagnosticCapture } from "@/src/runtime/diagnostic-capture"
 import { createBackgroundCoverPreviewMessageHandlers } from "./background-cover-preview-message-handlers"
 import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
@@ -74,11 +77,7 @@ import { DestinationService } from "@/entrypoints/background/destination"
 
 configureSeriesDataOffscreenLifecycle(runOffscreenDocumentAdmissionExclusive)
 
-const settingsRepository = new SettingsRepository(
-  ((import.meta as { env?: { DEV?: boolean } }).env?.DEV ?? false)
-    ? "debug"
-    : "warn"
-)
+const settingsRepository = new SettingsRepository()
 const historyRepository = new HistoryRepository()
 const historyQueryService = new HistoryQueryService(historyRepository)
 const siteOverridesService = new SiteOverridesService()
@@ -291,6 +290,7 @@ const backgroundRuntimeMessageListener = createRuntimeMessageListener({
 export default defineBackground({
   type: "module",
   main() {
+    installDiagnosticCapture("background")
     logger.info("Background script starting")
 
     // Event listeners are registered synchronously below. Versioned state
@@ -307,6 +307,14 @@ export default defineBackground({
     }
 
     chrome.runtime.onMessage.addListener(backgroundRuntimeMessageListener)
+    trackLocalDiagnosticPreference(() => {
+      void sendRuntimeMessage({
+        target: "offscreen",
+        type: "REFRESH_OFFSCREEN_DIAGNOSTIC_PREFERENCE",
+      }).catch(() => {
+        // There may be no offscreen document. Its cold start reads the saved level.
+      })
+    })
     settingsSubscriber.register()
     const refreshFolderActionItem = () => {
       void runtimeKernel

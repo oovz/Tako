@@ -46,7 +46,12 @@ function directoryDatabase() {
   ])
 
   return {
-    open: () => {
+    open: (database: string) => {
+      if (database !== "tako-fs")
+        throw new DOMException(
+          "Database unavailable in folder fixture",
+          "NotSupportedError"
+        )
       const request: {
         result?: unknown
         onsuccess?: () => void
@@ -298,6 +303,15 @@ async function fixture() {
     id: extensionId,
     url: `chrome-extension://${extensionId}/sidepanel.html`,
   }
+  const workerEvents = new EventTarget()
+  vi.stubGlobal(
+    "addEventListener",
+    workerEvents.addEventListener.bind(workerEvents)
+  )
+  vi.stubGlobal(
+    "removeEventListener",
+    workerEvents.removeEventListener.bind(workerEvents)
+  )
   vi.stubGlobal("chrome", {
     storage: {
       local: storageArea(local, "local"),

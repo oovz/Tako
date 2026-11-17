@@ -1,3 +1,5 @@
+import { trackLocalDiagnosticPreference } from "@/src/runtime/diagnostic-preference"
+import { installDiagnosticCapture } from "@/src/runtime/diagnostic-capture"
 import { createRoot } from "react-dom/client"
 import "@/globals.css"
 import "./sidepanel.css"
@@ -8,6 +10,8 @@ import { applyMotionPreference } from "@/src/ui/shared/ui-preferences"
 
 const rootEl = document.getElementById("root")
 if (rootEl) {
+  installDiagnosticCapture("sidepanel")
+  trackLocalDiagnosticPreference()
   // Keep the mounted panel still until the saved preference is applied.
   applyMotionPreference("reduce")
   createRoot(rootEl).render(

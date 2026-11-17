@@ -85,12 +85,37 @@ export async function hasOffscreenDocument(): Promise<boolean> {
   return await chrome.offscreen.hasDocument()
 }
 
+const DIAGNOSTIC_FLUSH_TIMEOUT_MS = 200
+
+async function tryFlushOffscreenDiagnostics(
+  documentInstanceId?: string
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      sendRuntimeMessage({
+        target: "offscreen",
+        type: "FLUSH_OFFSCREEN_DIAGNOSTICS",
+        payload: { documentInstanceId },
+      }),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, DIAGNOSTIC_FLUSH_TIMEOUT_MS)
+      }),
+    ])
+  } catch {
+    // Diagnostics must never prevent offscreen recovery or closure.
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function terminateOffscreenDocumentForUnboundLease(): Promise<void> {
   await runOffscreenLifecycleOperation(async () => {
     if (!(await chrome.offscreen.hasDocument())) {
       releaseAllTransientWorkReservations()
       return
     }
+    await tryFlushOffscreenDiagnostics()
     await chrome.offscreen.closeDocument()
     releaseAllTransientWorkReservations()
   })
@@ -120,20 +145,18 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
     releaseAllTransientWorkReservations()
     return "stale"
   }
+  const observedBrowserId = contexts
+    .map(browserDocumentId)
+    .find((id) => id !== undefined)
   if (
     input.browserDocumentId !== undefined &&
-    !contexts.some(
-      (context) =>
-        typeof context === "object" &&
-        context !== null &&
-        "documentId" in context &&
-        (context as { documentId?: unknown }).documentId ===
-          input.browserDocumentId
-    )
-  ) {
+    observedBrowserId !== input.browserDocumentId
+  )
     return "stale"
-  }
 
+  await tryFlushOffscreenDiagnostics(input.documentInstanceId)
+  if (!(await browserDocumentIsCurrent(contexts, observedBrowserId)))
+    return "stale"
   await chrome.offscreen.closeDocument()
   releaseAllTransientWorkReservations()
   return "closed"
@@ -794,6 +817,7 @@ async function closeIdleOffscreenDocument(
   const browserId = contexts
     .map(browserDocumentId)
     .find((id) => id !== undefined)
+  await tryFlushOffscreenDiagnostics(candidate.documentInstanceId)
   const browserIsCurrent = await browserDocumentIsCurrent(contexts, browserId)
   const [lease, hasDependencies] = await Promise.all([
     queueRepository.getActiveDispatchLease(),

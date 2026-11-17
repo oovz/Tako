@@ -130,6 +130,43 @@ describe("ensureOffscreenDocumentReady", () => {
     expect(closeDocument).toHaveBeenCalledOnce()
   })
 
+  it.each(["acknowledged", "unresponsive", "failed"] as const)(
+    "closes the current document after an %s diagnostic flush",
+    async (outcome) => {
+      vi.useFakeTimers()
+      hasDocument.mockResolvedValue(true)
+      const flush = Promise.withResolvers<unknown>()
+      sendMessage.mockImplementation(({ type }) => {
+        if (type === "FLUSH_OFFSCREEN_DIAGNOSTICS") return flush.promise
+        return Promise.resolve({
+          success: true,
+          initializationState: "ready",
+          documentInstanceId: "document-1",
+          activeJobCount: 0,
+          activeTransientWorkCount: 0,
+          activeTaskIds: [],
+        })
+      })
+      const closing = closeOffscreenDocumentIfCurrent({
+        documentInstanceId: "document-1",
+        browserDocumentId: "offscreen-document",
+      })
+      await vi.waitFor(() =>
+        expect(sendMessage).toHaveBeenCalledWith({
+          target: "offscreen",
+          type: "FLUSH_OFFSCREEN_DIAGNOSTICS",
+          payload: { documentInstanceId: "document-1" },
+        })
+      )
+      expect(closeDocument).not.toHaveBeenCalled()
+      if (outcome === "acknowledged") flush.resolve({ success: true })
+      if (outcome === "failed") flush.reject(new Error("Receiver disconnected"))
+      if (outcome === "unresponsive") await vi.advanceTimersByTimeAsync(500)
+      await expect(closing).resolves.toBe("closed")
+      expect(closeDocument).toHaveBeenCalledOnce()
+    }
+  )
+
   it.each([
     {
       caseName: "stale application incarnation",
@@ -211,7 +248,11 @@ describe("ensureOffscreenDocumentReady", () => {
       ])
     ).resolves.toEqual([undefined, undefined])
 
-    expect(sendMessage).toHaveBeenCalledTimes(2)
+    expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual([
+      "OFFSCREEN_STATUS",
+      "OFFSCREEN_STATUS",
+      "FLUSH_OFFSCREEN_DIAGNOSTICS",
+    ])
     expect(closeDocument).toHaveBeenCalledOnce()
     expect(createDocument).toHaveBeenCalledOnce()
   })

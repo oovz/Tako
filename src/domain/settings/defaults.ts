@@ -2,7 +2,7 @@ import type { ExtensionSettings } from "./types"
 import type { LogLevel } from "@/src/shared/download-contract"
 
 export function createDefaultSettings(
-  logLevel: LogLevel = "warn"
+  logLevel: LogLevel = "info"
 ): ExtensionSettings {
   return {
     downloads: {
