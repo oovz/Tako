@@ -591,6 +591,8 @@ export async function backgroundOutputRuntime(
         bytesReceived: 100,
       })
     await terminal.continueAfterNativeOutputSettlement(await native.reconcile())
+    // Join any watchdog activation before it can close a later fixture's document.
+    await scheduler.activate()
     await clearActiveTaskProgress()
     await dom.happyDOM.abort()
   }
