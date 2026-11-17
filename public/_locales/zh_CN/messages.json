@@ -1231,7 +1231,7 @@
     "message": "日志级别"
   },
   "options_logLevelDesc": {
-    "message": "控制台详细程度。使用 \"debug\" 进行故障排除。"
+    "message": "设置输出到控制台和保存到诊断中的最低日志级别。"
   },
   "options_logLevelError": {
     "message": "错误"
@@ -2327,5 +2327,83 @@
   },
   "options_chapterFolderContents": {
     "message": "每个章节文件夹内的文件"
+  },
+  "diagnostics_title": {
+    "message": "诊断"
+  },
+  "diagnostics_description": {
+    "message": "近期日志保存在此浏览器中。部分敏感值会被隐藏，但日志仍可能包含标题和 URL 路径。"
+  },
+  "diagnostics_loading": {
+    "message": "正在加载诊断日志…"
+  },
+  "diagnostics_empty": {
+    "message": "没有诊断日志。"
+  },
+  "diagnostics_unavailable": {
+    "message": "无法读取诊断日志。"
+  },
+  "diagnostics_background": {
+    "message": "后台"
+  },
+  "diagnostics_offscreen": {
+    "message": "离屏文档"
+  },
+  "diagnostics_sidepanel": {
+    "message": "侧边栏"
+  },
+  "diagnostics_options": {
+    "message": "选项"
+  },
+  "diagnostics_fallback": {
+    "message": "无法读取保存的日志级别。恢复读取前，仅记录警告和错误。"
+  },
+  "diagnostics_search": {
+    "message": "搜索日志"
+  },
+  "diagnostics_level": {
+    "message": "级别"
+  },
+  "diagnostics_source": {
+    "message": "来源"
+  },
+  "diagnostics_from": {
+    "message": "开始时间"
+  },
+  "diagnostics_to": {
+    "message": "结束时间"
+  },
+  "diagnostics_allLevels": {
+    "message": "所有级别"
+  },
+  "diagnostics_allSources": {
+    "message": "所有来源"
+  },
+  "diagnostics_pause": {
+    "message": "暂停更新"
+  },
+  "diagnostics_resume": {
+    "message": "恢复更新"
+  },
+  "diagnostics_clear": {
+    "message": "清除日志"
+  },
+  "diagnostics_clearDescription": {
+    "message": "要删除此浏览器中保存的诊断日志吗？新日志仍会继续记录。"
+  },
+  "diagnostics_clearFailed": {
+    "message": "无法清除日志。请重试。"
+  },
+  "diagnostics_noMatch": {
+    "message": "没有匹配的诊断日志。"
+  },
+  "diagnostics_details": {
+    "message": "详细信息"
+  },
+  "diagnostics_newer": {
+    "message": "较新的日志"
+  },
+  "diagnostics_older": {
+    "message": "较旧的日志"
   }
 }

@@ -91,7 +91,7 @@ test.describe("Options UI behavior", () => {
 
     await activeTaskCard.getByRole("button", { name: "Cancel" }).click()
     await expect(page.getByText("Cancel this Tako task?")).toBeVisible()
-    await page.getByRole("button", { name: "No" }).click()
+    await page.getByRole("button", { name: "No", exact: true }).click()
     await expect(page.getByText("Cancel this Tako task?")).toHaveCount(0)
 
     await queuedTaskCard.getByRole("button", { name: "Cancel" }).click()

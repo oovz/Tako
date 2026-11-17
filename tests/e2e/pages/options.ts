@@ -26,6 +26,7 @@ export class OptionsPageObject {
       network: "Network & Speed",
       integrations: "Site Integrations",
       activity: "Activity & History",
+      diagnostics: "Diagnostics",
     }
     await this.page
       .getByRole("button", { name: labels[section], exact: true })

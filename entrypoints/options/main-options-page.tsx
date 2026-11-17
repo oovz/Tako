@@ -48,6 +48,12 @@ const ActivityTab = lazy(() =>
   }))
 )
 
+const DiagnosticsTab = lazy(() =>
+  import("./tabs/DiagnosticsTab").then((module) => ({
+    default: module.DiagnosticsTab,
+  }))
+)
+
 type OptionsState = ReturnType<typeof useOptionsPageState>
 type LoadedOptionsState = OptionsState & { settingsBuffer: ExtensionSettings }
 type OptionsNavigation = ReturnType<typeof useOptionsNavigation>
@@ -73,7 +79,7 @@ function OptionsTabContent({
   activeSection,
 }: {
   state: LoadedOptionsState
-  activeSection: OptionsSection
+  activeSection: Exclude<OptionsSection, "diagnostics">
 }) {
   switch (activeSection) {
     case "general":
@@ -148,7 +154,7 @@ function OptionsWorkspace({
   state,
   navigation,
 }: {
-  state: LoadedOptionsState
+  state: OptionsState
   navigation: OptionsNavigation
 }) {
   const { activeSection, handleSectionChange } = navigation
@@ -201,10 +207,14 @@ function OptionsWorkspace({
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
                 <div className="options-section-enter">
-                  <OptionsTabContent
-                    state={state}
-                    activeSection={activeSection}
-                  />
+                  {activeSection === "diagnostics" ? (
+                    <DiagnosticsTab />
+                  ) : state.settingsBuffer ? (
+                    <OptionsTabContent
+                      state={{ ...state, settingsBuffer: state.settingsBuffer }}
+                      activeSection={activeSection}
+                    />
+                  ) : null}
                 </div>
               </Suspense>
             </section>
@@ -259,6 +269,9 @@ function OptionsPageContent({
   state: OptionsState
   navigation: OptionsNavigation
 }) {
+  if (navigation.activeSection === "diagnostics") {
+    return <OptionsWorkspace state={state} navigation={navigation} />
+  }
   if (state.loadFailed && (!state.settings || !state.settingsBuffer)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -269,6 +282,14 @@ function OptionsPageContent({
           <Button type="button" variant="outline" onClick={state.retryLoad}>
             {t("common_restart")}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            data-testid="open-diagnostics"
+            onClick={() => navigation.handleSectionChange("diagnostics")}
+          >
+            {t("diagnostics_title")}
+          </Button>
         </div>
       </div>
     )
@@ -276,15 +297,19 @@ function OptionsPageContent({
   if (state.isLoading || !state.settings || !state.settingsBuffer) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <div
-          className="text-center flex flex-col gap-4"
-          role="status"
-          aria-live="polite"
-        >
+        <div className="text-center flex flex-col gap-4">
           <Loader2 className="size-8 animate-spin mx-auto text-primary" />
-          <p className="text-sm text-muted-foreground">
+          <p role="status" className="text-sm text-muted-foreground">
             {t("options_loadingSettings")}
           </p>
+          <Button
+            type="button"
+            variant="ghost"
+            data-testid="open-diagnostics"
+            onClick={() => navigation.handleSectionChange("diagnostics")}
+          >
+            {t("diagnostics_title")}
+          </Button>
         </div>
       </div>
     )
@@ -305,7 +330,14 @@ export function OptionsPage() {
   useOptionsPageDocument(state.settingsBuffer)
   const content = <OptionsPageContent state={state} navigation={navigation} />
   return import.meta.env.DEV ? (
-    <Profiler id="OptionsPage" onRender={onRenderCallback}>
+    <Profiler
+      id="OptionsPage"
+      onRender={(id, phase, actualDuration, baseDuration) => {
+        // Diagnostic refreshes would otherwise write records that trigger another refresh.
+        if (navigation.activeSection !== "diagnostics")
+          onRenderCallback(id, phase, actualDuration, baseDuration)
+      }}
+    >
       {content}
     </Profiler>
   ) : (

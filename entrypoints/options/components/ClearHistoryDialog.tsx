@@ -19,6 +19,7 @@ interface ClearHistoryDialogProps {
   title: string
   description: string
   confirmLabel: string
+  failureMessage?: string
 }
 
 export function ClearHistoryDialog({
@@ -28,6 +29,7 @@ export function ClearHistoryDialog({
   title,
   description,
   confirmLabel,
+  failureMessage = t("options_clearHistoryRetry"),
 }: ClearHistoryDialogProps) {
   const [isClearing, setIsClearing] = useState(false)
   const [hasFailed, setHasFailed] = useState(false)
@@ -61,7 +63,7 @@ export function ClearHistoryDialog({
         </AlertDialogHeader>
         {hasFailed && (
           <p role="alert" className="text-sm text-destructive">
-            {t("options_clearHistoryRetry")}
+            {failureMessage}
           </p>
         )}
         <AlertDialogFooter>

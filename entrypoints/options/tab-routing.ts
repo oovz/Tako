@@ -6,6 +6,7 @@ const OPTIONS_SECTIONS = [
   "network",
   "integrations",
   "activity",
+  "diagnostics",
 ] as const
 
 export type OptionsSection = (typeof OPTIONS_SECTIONS)[number]

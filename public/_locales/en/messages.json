@@ -1231,7 +1231,7 @@
     "message": "Log Level"
   },
   "options_logLevelDesc": {
-    "message": "Console verbosity. Use \"debug\" for troubleshooting."
+    "message": "Set the minimum level for console output and entries saved in Diagnostics."
   },
   "options_logLevelError": {
     "message": "Error"
@@ -2339,5 +2339,83 @@
   },
   "options_chapterFolderContents": {
     "message": "Files inside each chapter folder"
+  },
+  "diagnostics_title": {
+    "message": "Diagnostics"
+  },
+  "diagnostics_description": {
+    "message": "Recent entries are stored in this browser. Redaction removes some sensitive values. Entries can still contain titles and URL paths."
+  },
+  "diagnostics_loading": {
+    "message": "Loading diagnostic entries…"
+  },
+  "diagnostics_empty": {
+    "message": "No diagnostic entries."
+  },
+  "diagnostics_unavailable": {
+    "message": "Diagnostic entries are unavailable."
+  },
+  "diagnostics_background": {
+    "message": "Background"
+  },
+  "diagnostics_offscreen": {
+    "message": "Offscreen document"
+  },
+  "diagnostics_sidepanel": {
+    "message": "Side Panel"
+  },
+  "diagnostics_options": {
+    "message": "Options"
+  },
+  "diagnostics_fallback": {
+    "message": "The saved logging level is unavailable. Recording Warning and Error entries until it can be read."
+  },
+  "diagnostics_search": {
+    "message": "Search logs"
+  },
+  "diagnostics_level": {
+    "message": "Level"
+  },
+  "diagnostics_source": {
+    "message": "Source"
+  },
+  "diagnostics_from": {
+    "message": "From"
+  },
+  "diagnostics_to": {
+    "message": "To"
+  },
+  "diagnostics_allLevels": {
+    "message": "All levels"
+  },
+  "diagnostics_allSources": {
+    "message": "All sources"
+  },
+  "diagnostics_pause": {
+    "message": "Pause updates"
+  },
+  "diagnostics_resume": {
+    "message": "Resume updates"
+  },
+  "diagnostics_clear": {
+    "message": "Clear logs"
+  },
+  "diagnostics_clearDescription": {
+    "message": "Delete the diagnostic entries stored in this browser? New entries will continue to be recorded."
+  },
+  "diagnostics_clearFailed": {
+    "message": "Logs could not be cleared. Try again."
+  },
+  "diagnostics_noMatch": {
+    "message": "No matching diagnostic entries."
+  },
+  "diagnostics_details": {
+    "message": "Details"
+  },
+  "diagnostics_newer": {
+    "message": "Newer entries"
+  },
+  "diagnostics_older": {
+    "message": "Older entries"
   }
 }

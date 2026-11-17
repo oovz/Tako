@@ -1231,7 +1231,7 @@
     "message": "로그 수준"
   },
   "options_logLevelDesc": {
-    "message": "콘솔의 상세 수준입니다. 문제 해결 시 \"debug\"를 사용하세요."
+    "message": "콘솔 출력과 진단 로그에 기록할 최소 수준을 설정합니다."
   },
   "options_logLevelError": {
     "message": "오류"
@@ -2339,5 +2339,83 @@
   },
   "options_chapterFolderContents": {
     "message": "각 챕터 폴더 안의 파일"
+  },
+  "diagnostics_title": {
+    "message": "진단"
+  },
+  "diagnostics_description": {
+    "message": "최근 로그는 이 브라우저에 저장됩니다. 일부 민감한 값은 가려지지만 제목과 URL 경로가 남을 수 있습니다."
+  },
+  "diagnostics_loading": {
+    "message": "진단 로그를 불러오는 중…"
+  },
+  "diagnostics_empty": {
+    "message": "진단 로그가 없습니다."
+  },
+  "diagnostics_unavailable": {
+    "message": "진단 로그를 불러올 수 없습니다."
+  },
+  "diagnostics_background": {
+    "message": "백그라운드"
+  },
+  "diagnostics_offscreen": {
+    "message": "오프스크린 문서"
+  },
+  "diagnostics_sidepanel": {
+    "message": "측면 패널"
+  },
+  "diagnostics_options": {
+    "message": "옵션"
+  },
+  "diagnostics_fallback": {
+    "message": "저장된 로그 수준을 읽을 수 없습니다. 읽을 수 있을 때까지 경고와 오류를 기록합니다."
+  },
+  "diagnostics_search": {
+    "message": "로그 검색"
+  },
+  "diagnostics_level": {
+    "message": "수준"
+  },
+  "diagnostics_source": {
+    "message": "출처"
+  },
+  "diagnostics_from": {
+    "message": "시작"
+  },
+  "diagnostics_to": {
+    "message": "종료"
+  },
+  "diagnostics_allLevels": {
+    "message": "모든 수준"
+  },
+  "diagnostics_allSources": {
+    "message": "모든 출처"
+  },
+  "diagnostics_pause": {
+    "message": "업데이트 일시 중지"
+  },
+  "diagnostics_resume": {
+    "message": "업데이트 재개"
+  },
+  "diagnostics_clear": {
+    "message": "로그 지우기"
+  },
+  "diagnostics_clearDescription": {
+    "message": "이 브라우저에 저장된 진단 로그를 삭제할까요? 새 로그는 계속 기록됩니다."
+  },
+  "diagnostics_clearFailed": {
+    "message": "로그를 지우지 못했습니다. 다시 시도하세요."
+  },
+  "diagnostics_noMatch": {
+    "message": "조건에 맞는 진단 로그가 없습니다."
+  },
+  "diagnostics_details": {
+    "message": "상세 정보"
+  },
+  "diagnostics_newer": {
+    "message": "최신 로그"
+  },
+  "diagnostics_older": {
+    "message": "이전 로그"
   }
 }

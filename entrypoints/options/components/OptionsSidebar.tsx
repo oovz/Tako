@@ -1,5 +1,12 @@
 import { useOptionsIndicator } from "../hooks/useOptionsMotion"
-import { Activity, FolderArchive, Puzzle, Settings, Zap } from "lucide-react"
+import {
+  Activity,
+  FolderArchive,
+  ListFilter,
+  Puzzle,
+  Settings,
+  Zap,
+} from "lucide-react"
 
 import { cn } from "@/src/shared/utils"
 import type { OptionsSection } from "../tab-routing"
@@ -16,6 +23,7 @@ const sections = [
   { id: "network", label: "options_network", icon: Zap },
   { id: "integrations", label: "options_siteIntegrations", icon: Puzzle },
   { id: "activity", label: "options_activity", icon: Activity },
+  { id: "diagnostics", label: "diagnostics_title", icon: ListFilter },
 ] as const
 
 export function OptionsSidebar({
@@ -35,7 +43,7 @@ export function OptionsSidebar({
       <nav
         ref={navigation}
         aria-label={t("options_takoSettings")}
-        className="options-navigation grid grid-cols-3 gap-1 px-3 pb-3 sm:grid-cols-5 lg:flex lg:flex-col lg:pt-3"
+        className="options-navigation grid grid-cols-3 gap-1 px-3 pb-3 sm:grid-cols-6 lg:flex lg:flex-col lg:pt-3"
       >
         <span className="options-indicator" aria-hidden="true" />
         {sections.map(({ id, label, icon: Icon }) => (

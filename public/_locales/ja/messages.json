@@ -1231,7 +1231,7 @@
     "message": "ログレベル"
   },
   "options_logLevelDesc": {
-    "message": "コンソールの詳細度。トラブルシューティングには \"debug\" を使用。"
+    "message": "コンソール出力と診断ログに記録する最低レベルを設定します。"
   },
   "options_logLevelError": {
     "message": "エラー"
@@ -2327,5 +2327,83 @@
   },
   "options_chapterFolderContents": {
     "message": "各チャプターフォルダー内のファイル"
+  },
+  "diagnostics_title": {
+    "message": "診断"
+  },
+  "diagnostics_description": {
+    "message": "最近のログはこのブラウザーに保存されます。一部の機密情報は伏せられますが、作品名や URL のパスが残る場合があります。"
+  },
+  "diagnostics_loading": {
+    "message": "診断ログを読み込み中…"
+  },
+  "diagnostics_empty": {
+    "message": "診断ログはありません。"
+  },
+  "diagnostics_unavailable": {
+    "message": "診断ログを読み込めません。"
+  },
+  "diagnostics_background": {
+    "message": "バックグラウンド"
+  },
+  "diagnostics_offscreen": {
+    "message": "オフスクリーン ドキュメント"
+  },
+  "diagnostics_sidepanel": {
+    "message": "サイドパネル"
+  },
+  "diagnostics_options": {
+    "message": "オプション"
+  },
+  "diagnostics_fallback": {
+    "message": "保存されたログレベルを読み込めません。読み込めるようになるまで警告とエラーを記録します。"
+  },
+  "diagnostics_search": {
+    "message": "ログを検索"
+  },
+  "diagnostics_level": {
+    "message": "レベル"
+  },
+  "diagnostics_source": {
+    "message": "記録元"
+  },
+  "diagnostics_from": {
+    "message": "開始日時"
+  },
+  "diagnostics_to": {
+    "message": "終了日時"
+  },
+  "diagnostics_allLevels": {
+    "message": "すべてのレベル"
+  },
+  "diagnostics_allSources": {
+    "message": "すべての記録元"
+  },
+  "diagnostics_pause": {
+    "message": "更新を一時停止"
+  },
+  "diagnostics_resume": {
+    "message": "更新を再開"
+  },
+  "diagnostics_clear": {
+    "message": "ログを消去"
+  },
+  "diagnostics_clearDescription": {
+    "message": "このブラウザーに保存された診断ログを削除しますか？新しいログは引き続き記録されます。"
+  },
+  "diagnostics_clearFailed": {
+    "message": "ログを消去できませんでした。もう一度お試しください。"
+  },
+  "diagnostics_noMatch": {
+    "message": "条件に一致する診断ログはありません。"
+  },
+  "diagnostics_details": {
+    "message": "詳細"
+  },
+  "diagnostics_newer": {
+    "message": "新しいログへ"
+  },
+  "diagnostics_older": {
+    "message": "古いログへ"
   }
 }

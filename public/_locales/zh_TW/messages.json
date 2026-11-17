@@ -1231,7 +1231,7 @@
     "message": "日誌層級"
   },
   "options_logLevelDesc": {
-    "message": "主控台詳細程度。使用 \"debug\" 進行故障排除。"
+    "message": "設定主控台輸出及儲存至診斷記錄的最低層級。"
   },
   "options_logLevelError": {
     "message": "錯誤"
@@ -2327,5 +2327,83 @@
   },
   "options_chapterFolderContents": {
     "message": "每個章節資料夾內的檔案"
+  },
+  "diagnostics_title": {
+    "message": "診斷"
+  },
+  "diagnostics_description": {
+    "message": "近期記錄儲存在此瀏覽器。系統會遮蔽部分敏感值，但記錄仍可能包含標題和 URL 路徑。"
+  },
+  "diagnostics_loading": {
+    "message": "正在載入診斷記錄…"
+  },
+  "diagnostics_empty": {
+    "message": "沒有診斷記錄。"
+  },
+  "diagnostics_unavailable": {
+    "message": "無法讀取診斷記錄。"
+  },
+  "diagnostics_background": {
+    "message": "背景"
+  },
+  "diagnostics_offscreen": {
+    "message": "離屏文件"
+  },
+  "diagnostics_sidepanel": {
+    "message": "側邊欄"
+  },
+  "diagnostics_options": {
+    "message": "選項"
+  },
+  "diagnostics_fallback": {
+    "message": "無法讀取已儲存的記錄層級。恢復讀取前，只記錄警告和錯誤。"
+  },
+  "diagnostics_search": {
+    "message": "搜尋記錄"
+  },
+  "diagnostics_level": {
+    "message": "層級"
+  },
+  "diagnostics_source": {
+    "message": "來源"
+  },
+  "diagnostics_from": {
+    "message": "起始時間"
+  },
+  "diagnostics_to": {
+    "message": "結束時間"
+  },
+  "diagnostics_allLevels": {
+    "message": "所有層級"
+  },
+  "diagnostics_allSources": {
+    "message": "所有來源"
+  },
+  "diagnostics_pause": {
+    "message": "暫停更新"
+  },
+  "diagnostics_resume": {
+    "message": "繼續更新"
+  },
+  "diagnostics_clear": {
+    "message": "清除記錄"
+  },
+  "diagnostics_clearDescription": {
+    "message": "要刪除此瀏覽器中儲存的診斷記錄嗎？仍會繼續記錄新的項目。"
+  },
+  "diagnostics_clearFailed": {
+    "message": "無法清除記錄。請再試一次。"
+  },
+  "diagnostics_noMatch": {
+    "message": "沒有符合條件的診斷記錄。"
+  },
+  "diagnostics_details": {
+    "message": "詳細資料"
+  },
+  "diagnostics_newer": {
+    "message": "較新的記錄"
+  },
+  "diagnostics_older": {
+    "message": "較舊的記錄"
   }
 }
