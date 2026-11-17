@@ -69,4 +69,8 @@ The controls work independently: clearing task history preserves chapter history
 
 ## Report a problem
 
-[Open a bug report](https://github.com/oovz/Tako/issues/new?template=bug_report.md) with your Tako version, Chrome version, site, a public series URL, the visible message, and the steps that led to it. Leave out account credentials and private download links.
+1. Reproduce the problem, then open **Tako Settings → Diagnostics** in the same Chrome profile. If settings fail to load, choose **Diagnostics** on the loading or error screen.
+2. Filter to the time of the problem and choose **Export JSON**. The report can still contain titles and URL paths. Review it before sharing.
+3. [Open a bug report](https://github.com/oovz/Tako/issues/new?template=bug_report.md) with the report, your Tako and Chrome versions, the site, and the steps that led to the problem.
+
+You can pause live updates while you read. Chrome keeps committed entries across restarts. Very recent entries can be lost if a window or worker closes before it finishes writing. **Clear logs** removes the retained diagnostic entries.

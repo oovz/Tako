@@ -33,9 +33,6 @@ What you saw instead.
 
 ## Screenshots / logs
 
-Screenshots help. If you can grab logs from the service worker, even better:
+Open **Tako Settings → Diagnostics** after reproducing the problem. If settings fail to load, use **Diagnostics** on that screen. Filter to the relevant time and choose **Export JSON**. Review the file before attaching it. Redaction removes some sensitive values, but titles and URL paths can remain.
 
-1. Go to `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click the **service worker** link under Tako.
-4. Copy any relevant errors from the Console tab.
+Include screenshots of any visible errors.
