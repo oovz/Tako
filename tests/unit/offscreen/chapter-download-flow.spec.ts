@@ -703,7 +703,7 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
     }
   })
 
-  it("skips extension retry wrapper when integration declares handlesOwnRetries", async () => {
+  it("passes captured retry counts to a provider-owned page download", async () => {
     offscreenSiteAdaptersById["test-site"] = {
       id: "test-site",
       offscreen: {
@@ -764,6 +764,7 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
         archiveFormat: "none",
         includeComicInfo: false,
         includeCoverImage: false,
+        retrySettings: { image: 5, chapter: 0 },
       },
       saveMode: "downloads-api",
     })
@@ -777,6 +778,14 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
     const outcome = worker.getJobState(acknowledgment)?.outcome
 
     expect(callCount).toBe(1)
+    expect(mockDownloadImage).toHaveBeenCalledWith(
+      "https://example.test/img1.jpg",
+      expect.objectContaining({
+        runtime: expect.objectContaining({
+          retrySettings: { image: 5, chapter: 0 },
+        }),
+      })
+    )
     expect(outcome?.status).toBe("failed")
   })
 

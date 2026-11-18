@@ -6,7 +6,10 @@ import { parseRateLimitRetryAfterHeader } from "@/src/shared/site-integration-ut
 import { integrationHttpClient } from "../http-client"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseBytes } from "@/src/shared/html-response-decoder"
-import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
+import {
+  DEFAULT_FETCH_TIMEOUT_MS,
+  MAX_CHAPTER_IMAGES,
+} from "@/src/constants/timeouts"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import { waitForMangadexDelay } from "./api-delay"
 
@@ -14,7 +17,7 @@ export const MANGADEX_API_BASE = "https://api.mangadex.org"
 export const MANGADEX_UPLOADS_BASE = "https://uploads.mangadex.org"
 export const MANGADEX_NETWORK_REPORT = "https://api.mangadex.network/report"
 export const MANGADEX_NETWORK_REPORT_TIMEOUT_MS = 1500
-export const MANGADEX_IMAGE_RECOVERY_MAX_CYCLES = 5
+export const MANGADEX_DEFAULT_RETRIES = 3
 export const MANGADEX_IMAGE_RECOVERY_BACKOFF_MS = 250
 export const MANGADEX_SITE_BASE = "https://mangadex.org"
 
@@ -25,7 +28,7 @@ type MangadexRetryConfig = {
 }
 
 const MANGADEX_RETRY_CONFIG: MangadexRetryConfig = {
-  maxRetries: 3,
+  maxRetries: MANGADEX_DEFAULT_RETRIES,
   defaultRetryDelayMs: 5000,
   maxRetryDelayMs: 60000,
 }
@@ -305,12 +308,15 @@ const shouldRetryTransientResponse = (
   }
 }
 
+export type MangadexRetryBudget = { remaining: number }
+
 type MangadexRequestAttempt = {
   url: string
   rateLimitService: RateLimitService
   options?: RequestInit
-  retryCount: number
+  budget: MangadexRetryBudget
   retryConfig: MangadexRetryConfig
+  requestTimeoutMs?: number
   endpointId: "mangadex-api" | "mangadex-at-home-image"
 }
 
@@ -326,7 +332,8 @@ function isRetryableMangadexNetworkError(
   }
   return (
     error instanceof TypeError ||
-    (error instanceof Error && error.name === "TypeError")
+    (error instanceof Error &&
+      (error.name === "TypeError" || error.name === "TimeoutError"))
   )
 }
 
@@ -336,15 +343,13 @@ async function retryMangadexRequest(
   reason: string,
   response?: Response
 ): Promise<Response> {
-  logger.warn(
-    `[mangadex] ${reason}, retrying in ${delay}ms (attempt ${attempt.retryCount + 1}/${attempt.retryConfig.maxRetries})`
-  )
+  attempt.budget.remaining--
+  logger.warn(`[mangadex] ${reason}, retrying in ${delay}ms`, {
+    retriesRemaining: attempt.budget.remaining,
+  })
   if (response) cancelResponseBody(response)
   await waitForMangadexDelay(delay, attempt.options?.signal)
-  return fetchWithMangadexRetryUsingPolicy({
-    ...attempt,
-    retryCount: attempt.retryCount + 1,
-  })
+  return fetchWithMangadexRetryUsingPolicy(attempt)
 }
 
 async function requestMangadexAttempt(
@@ -355,24 +360,36 @@ async function requestMangadexAttempt(
     url,
     options,
     rateLimitService,
-    retryCount,
-    retryConfig,
+    budget,
+    requestTimeoutMs,
   } = attempt
+  const signal = options?.signal
+  signal?.throwIfAborted()
+  const timeout =
+    requestTimeoutMs === undefined
+      ? undefined
+      : AbortSignal.timeout(requestTimeoutMs)
+  const init = timeout
+    ? {
+        ...options,
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      }
+    : options
   try {
     const response = await integrationHttpClient.request({
       integrationId: "mangadex",
       endpointId,
       url,
       scope: endpointId === "mangadex-api" ? "chapter" : "image",
-      init: options,
+      init,
       skipRateLimit: endpointId === "mangadex-at-home-image",
       rateLimitService,
     })
     return { response }
   } catch (error) {
     if (
-      retryCount >= retryConfig.maxRetries ||
-      !isRetryableMangadexNetworkError(error, options?.signal)
+      budget.remaining === 0 ||
+      !isRetryableMangadexNetworkError(error, signal)
     ) {
       throw error
     }
@@ -395,7 +412,7 @@ async function fetchWithMangadexRetryUsingPolicy(
   const shouldRetry =
     response.status === 429 ||
     shouldRetryTransientResponse(attempt.url, response)
-  if (shouldRetry && attempt.retryCount < attempt.retryConfig.maxRetries) {
+  if (shouldRetry && attempt.budget.remaining > 0) {
     const delay =
       parseRetryAfterHeader(response) ?? attempt.retryConfig.defaultRetryDelayMs
     return retryMangadexRequest(
@@ -417,13 +434,13 @@ export async function fetchWithMangadexRetry(
   url: string,
   rateLimitService: RateLimitService,
   options?: RequestInit,
-  retryCount = 0
+  budget: MangadexRetryBudget = { remaining: MANGADEX_DEFAULT_RETRIES }
 ): Promise<Response> {
   return fetchWithMangadexRetryUsingPolicy({
     url,
     rateLimitService,
     options,
-    retryCount,
+    budget,
     retryConfig: MANGADEX_RETRY_CONFIG,
     endpointId: "mangadex-at-home-image",
   })
@@ -439,14 +456,18 @@ async function fetchMangadexApiResponse<T>(
   schema: z.ZodType<T>,
   retryMode: MangadexRetryMode,
   signal?: AbortSignal,
-  rateLimitMessage?: string
+  rateLimitMessage?: string,
+  maxRetries?: number
 ): Promise<T> {
+  const retryConfig = retryConfigForMode(retryMode)
   const response = await fetchWithMangadexRetryUsingPolicy({
     url,
     rateLimitService,
     options: { credentials: "omit", signal },
-    retryCount: 0,
-    retryConfig: retryConfigForMode(retryMode),
+    budget: { remaining: maxRetries ?? retryConfig.maxRetries },
+    retryConfig,
+    requestTimeoutMs:
+      maxRetries === undefined ? undefined : DEFAULT_FETCH_TIMEOUT_MS,
     endpointId: "mangadex-api",
   })
   if (!response.ok) {
@@ -578,7 +599,8 @@ export async function fetchChapterFeed(
 export async function fetchAtHomeServer(
   chapterId: string,
   rateLimitService: RateLimitService,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  maxRetries = MANGADEX_DEFAULT_RETRIES
 ): Promise<AtHomeResponse> {
   const url = `${MANGADEX_API_BASE}/at-home/server/${chapterId}`
   return fetchMangadexApiResponse(
@@ -587,6 +609,7 @@ export async function fetchAtHomeServer(
     AtHomeResponseSchema,
     "resilient",
     signal,
-    "MangaDex at-home rate limit exceeded (40/min). Please wait."
+    "MangaDex at-home rate limit exceeded (40/min). Please wait.",
+    maxRetries
   )
 }

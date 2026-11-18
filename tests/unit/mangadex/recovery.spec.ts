@@ -21,13 +21,14 @@ const rateLimitService = {
   resolveEffectivePolicy: async () => ({ concurrency: 1, delayMs: 0 }),
 } as unknown as RateLimitService
 
-function options(signal?: AbortSignal) {
+function options(signal?: AbortSignal, imageRetries = 3) {
   return {
     signal,
     liveResourceLedger: new OffscreenLiveResourceLedger(),
     runtime: {
       chapterId: "chapter",
       rateLimitService,
+      retrySettings: { image: imageRetries, chapter: 0 },
       rateLimitSettings: createTaskSettingsSnapshot(
         DEFAULT_SETTINGS,
         "mangadex"
@@ -71,7 +72,7 @@ afterEach(() => {
 
 it("bounds refreshed image attempts while retaining the original failure as cause", async () => {
   mockRecovery(503)
-  const pending = downloadMangadexChapterImage(imageUrl, options())
+  const pending = downloadMangadexChapterImage(imageUrl, options(undefined, 5))
   const rejected = expect(pending).rejects.toMatchObject({
     cause: { status: 404 },
     message: expect.stringContaining("503"),
@@ -86,6 +87,42 @@ it("bounds refreshed image attempts while retaining the original failure as caus
   expect(
     fetchMock.mock.calls.filter(([url]) => String(url) === uploadsUrl)
   ).toHaveLength(5)
+})
+
+it("uses only the original image request with zero configured retries", async () => {
+  mockRecovery(503)
+  await expect(
+    downloadMangadexChapterImage(imageUrl, options(undefined, 0))
+  ).rejects.toMatchObject({ status: 404 })
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url) === imageUrl)
+  ).toHaveLength(1)
+  expect(
+    fetchMock.mock.calls.some(([url]) =>
+      String(url).includes("/at-home/server/")
+    )
+  ).toBe(false)
+})
+
+it("shares the configured page retry budget between rate limits and node recovery", async () => {
+  mockRecovery(503)
+  fetchMock.mockImplementationOnce(
+    async () => new Response(null, { status: 429 })
+  )
+  const pending = downloadMangadexChapterImage(imageUrl, options(undefined, 2))
+  const rejected = expect(pending).rejects.toMatchObject({
+    cause: { status: 404 },
+    message: expect.stringContaining("503"),
+  })
+  await vi.advanceTimersByTimeAsync(5000)
+  await rejected
+
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url) === imageUrl)
+  ).toHaveLength(2)
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url) === uploadsUrl)
+  ).toHaveLength(1)
 })
 
 it("stops recovery on a nontransient candidate failure", async () => {

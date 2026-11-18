@@ -242,14 +242,15 @@ export class OffscreenWorker {
     hooks:
       | { onAttemptStart?: (attempt: number) => void | Promise<void> }
       | undefined,
-    signal: AbortSignal,
-    options?: { retryNotFound: boolean }
+    signal: AbortSignal
   ): Promise<T> {
     if (job.handlesOwnRetries) {
       await hooks?.onAttemptStart?.(1)
       return fn()
     }
-    return withRetries(fn, job.retries.image, 1000, hooks, signal, options)
+    return withRetries(fn, job.retries.image, 1000, hooks, signal, {
+      retryNotFound: true,
+    })
   }
 
   private async requestBrowserBlobDownload(input: {
@@ -582,9 +583,10 @@ export class OffscreenWorker {
           onAttemptStart?: (attempt: number) => void | Promise<void>
         }
       ) =>
-        this.withImageRetries(
-          job,
+        withRetries(
           fn,
+          job.retries.image,
+          1000,
           hooks,
           taskControllerEntry.controller.signal
         ),
@@ -822,7 +824,7 @@ export class OffscreenWorker {
       const integrationId = job.integrationId
 
       const { integration: OffscreenIntegration, downloadImage } =
-        this.resolveChapterIntegration(integrationId)
+        this.resolveChapterIntegration(job)
 
       await onProgress(5, "fetching")
       if (abortSignal?.aborted) throw new Error("job-cancelled")
@@ -869,7 +871,10 @@ export class OffscreenWorker {
     }
   }
 
-  private resolveChapterIntegration(integrationId: string) {
+  private resolveChapterIntegration({
+    integrationId,
+    retries,
+  }: JobExecutionContext) {
     const integration = offscreenSiteAdaptersById[integrationId]?.offscreen
     if (!integration) {
       throw new Error(`No site integration found for ID: ${integrationId}`)
@@ -878,6 +883,7 @@ export class OffscreenWorker {
     const downloadImage: ChapterDownloadImageFn = (url, options) =>
       integration.chapter.downloadImage(url, {
         ...options,
+        runtime: { ...options.runtime, retrySettings: retries },
         liveResourceLedger: this.liveResourceLedger,
       })
 
@@ -892,19 +898,17 @@ export class OffscreenWorker {
   ) {
     const { onProgress, abortSignal } = opts
     const chapterRetries = job.retries.chapter
-    const resolveWithTimeout = () =>
-      this.resolveChapterPlanWithTimeout(
-        opts,
-        OffscreenIntegration,
-        rateLimitService
-      )
-
     // Report each resolve/fetch retry as meaningful progress. The dedicated
     // heartbeat renews the durable job lease independently, while this event
     // keeps the visible stage accurate for long retry sequences.
     const resolveWithProgress = async () => {
       await onProgress(10, "parsing")
-      return resolveWithTimeout()
+      return this.resolveChapterPlanAttempt(
+        opts,
+        OffscreenIntegration,
+        rateLimitService,
+        job.handlesOwnRetries
+      )
     }
 
     return job.handlesOwnRetries
@@ -918,10 +922,11 @@ export class OffscreenWorker {
         )
   }
 
-  private async resolveChapterPlanWithTimeout(
+  private async resolveChapterPlanAttempt(
     opts: ProcessChapterStreamingOptions,
     OffscreenIntegration: OffscreenIntegration,
-    rateLimitService: RateLimitService
+    rateLimitService: RateLimitService,
+    providerOwnsRetries: boolean
   ) {
     const { chapter, abortSignal } = opts
     const resolverController = new AbortController()
@@ -943,6 +948,10 @@ export class OffscreenWorker {
           signal: resolverController.signal,
         }
       )
+      // Provider-owned resolution applies a deadline to each request so its
+      // backoff and later attempts can outlast the shared single-attempt limit.
+      if (providerOwnsRetries)
+        return parseChapterImagePlan(await resolvePromise)
       return parseChapterImagePlan(
         await awaitWithTimeoutAndSignal(
           resolvePromise,
@@ -974,8 +983,7 @@ export class OffscreenWorker {
             }
           | undefined,
         signal: AbortSignal
-      ) =>
-        this.withImageRetries(job, fn, hooks, signal, { retryNotFound: true }),
+      ) => this.withImageRetries(job, fn, hooks, signal),
       resolveWritableDownloadRoot: async () => {
         const captured = await writableRoot
         if (!captured) throw new Error("Custom folder is not configured")

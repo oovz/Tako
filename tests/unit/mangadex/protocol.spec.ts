@@ -13,6 +13,7 @@ import {
 import { parseMangadexImageDeliveryTarget } from "@/src/site-integrations/mangadex/image-delivery"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { offscreenSiteAdapter } from "@/src/site-integrations/mangadex/offscreen-runtime"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -164,6 +165,34 @@ describe("MangaDex API through the endpoint HTTP boundary", () => {
     await rejected
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
+
+  it.each([0, 4])(
+    "honors %i configured retries for at-home chapter resolution",
+    async (chapterRetries) => {
+      vi.useFakeTimers()
+      fetchMock.mockImplementation(async (input) =>
+        response(String(input), {}, 503)
+      )
+      const chapterId = "d67b3fdf-a5ad-4e2f-9474-febee3fa365f"
+      const pending = offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
+        { id: chapterId, url: `https://mangadex.org/chapter/${chapterId}` },
+        {
+          settings: { retrySettings: { image: 0, chapter: chapterRetries } },
+          runtime: {
+            rateLimitService,
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
+        }
+      )
+      const rejected = expect(pending).rejects.toMatchObject({ status: 503 })
+      await vi.advanceTimersByTimeAsync(chapterRetries * 5000)
+      await rejected
+      expect(fetchMock).toHaveBeenCalledTimes(chapterRetries + 1)
+    }
+  )
 
   it("leaves transient image-host HTTP responses to image recovery without adding scheduling", async () => {
     fetchMock.mockImplementation(async (input) =>

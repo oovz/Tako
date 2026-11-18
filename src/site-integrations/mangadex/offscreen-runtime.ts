@@ -32,7 +32,8 @@ const offscreen: OffscreenIntegration<MangadexDispatchContext> = {
         chapter,
         input.runtime.rateLimitService,
         context,
-        input.signal
+        input.signal,
+        input.settings?.retrySettings?.chapter
       )
       return ChapterImagePlanSchema.parse({ imageUrls: urls })
     },

@@ -1557,9 +1557,7 @@ describe("MangaDex site integration", () => {
       try {
         const responsePromise = fetchWithMangadexRetry(
           "https://api.mangadex.org/manga/test-id",
-          rateLimitService,
-          undefined,
-          0
+          rateLimitService
         )
         await vi.advanceTimersByTimeAsync(6000)
         await expect(responsePromise).resolves.toMatchObject({ ok: true })
@@ -1580,9 +1578,7 @@ describe("MangaDex site integration", () => {
       try {
         const responsePromise = fetchWithMangadexRetry(
           "https://api.mangadex.org/manga/test-id",
-          rateLimitService,
-          undefined,
-          0
+          rateLimitService
         )
         const expectation =
           expect(responsePromise).rejects.toThrow("Failed to fetch")
@@ -1598,7 +1594,6 @@ describe("MangaDex site integration", () => {
       const { fetchWithMangadexRetry } =
         await import("@/src/site-integrations/mangadex/api")
       const controller = new AbortController()
-      controller.abort()
       const abortError = new Error("The operation was aborted")
       abortError.name = "AbortError"
       ;(global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(abortError)
@@ -1607,8 +1602,7 @@ describe("MangaDex site integration", () => {
         fetchWithMangadexRetry(
           "https://api.mangadex.org/manga/test-id",
           rateLimitService,
-          { signal: controller.signal },
-          0
+          { signal: controller.signal }
         )
       ).rejects.toThrow("aborted")
       expect(global.fetch).toHaveBeenCalledOnce()
@@ -2320,7 +2314,7 @@ describe("MangaDex site integration", () => {
       await vi.waitFor(() => expect(recoveryStarted).toBe(true))
       expect(fetchMock).toHaveBeenCalledWith(
         "https://api.mangadex.org/at-home/server/ch-1",
-        expect.objectContaining({ signal: controller.signal })
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
       controller.abort()
 
