@@ -37,8 +37,7 @@ type DownloadChapterImageFailure = {
   url: string
   index: number
   error: unknown
-  failedCount: number
-  total: number
+  attempts: number
 }
 
 type DownloadChapterImagesOptions = {
@@ -59,7 +58,7 @@ type DownloadChapterImagesOptions = {
   onDownloaded: (image: DownloadChapterImageSuccess) => void | Promise<void>
   onDownloadFailed: (failure: DownloadChapterImageFailure) => void
   mapImageIndex?: (index: number) => number
-  collectFailureReasons?: boolean
+  stopOnFailure?: boolean
   isFatalError?: (error: unknown) => boolean
   initialAggregateBytes?: number
 }
@@ -69,8 +68,7 @@ type DownloadChapterImagesResult = {
   processed: number
   succeeded: number
   failed: number
-  failedUrls: string[]
-  failedReasons: string[]
+  firstFailure?: DownloadChapterImageFailure
 }
 
 type ImageByteState = { receivedBytes: number; reservedBytes: number }
@@ -143,8 +141,7 @@ class ChapterImageBatch {
   private processed = 0
   private succeeded = 0
   private failed = 0
-  private readonly failedUrls: string[] = []
-  private readonly failedReasons: string[] = []
+  private firstFailure: DownloadChapterImageFailure | undefined
 
   constructor(
     private readonly runtime: ChapterProcessingRuntime,
@@ -197,8 +194,7 @@ class ChapterImageBatch {
       processed: this.processed,
       succeeded: this.succeeded,
       failed: this.failed,
-      failedUrls: this.failedUrls,
-      failedReasons: this.failedReasons,
+      firstFailure: this.firstFailure,
     }
   }
 
@@ -259,7 +255,8 @@ class ChapterImageBatch {
 
   private downloadWithRetries(
     url: string,
-    state: ImageByteState
+    state: ImageByteState,
+    onAttemptStart: (attempt: number) => void
   ): Promise<ChapterDownloadImageResult> {
     return this.runtime.withImageRetries(
       () =>
@@ -272,6 +269,7 @@ class ChapterImageBatch {
       {
         onAttemptStart: async (attempt) => {
           this.assertActive()
+          onAttemptStart(attempt)
           if (attempt > 1) this.budget.release(state)
           await this.emitInFlightProgress()
         },
@@ -280,38 +278,33 @@ class ChapterImageBatch {
     )
   }
 
-  private recordFailure(url: string, index: number, error: unknown): void {
+  private recordFailure(
+    url: string,
+    index: number,
+    error: unknown,
+    attempts: number
+  ): void {
     if (isResourceLimit(error)) {
       this.budget.failure ??= error.message
       this.cancelPending(error)
-    } else if (this.input.isFatalError?.(error)) {
+    } else if (this.input.stopOnFailure || this.input.isFatalError?.(error)) {
       this.cancelPending(error)
     }
-    this.rememberFailure(url, error)
-    this.input.onDownloadFailed({
-      url,
-      index,
-      error,
-      failedCount: this.failed,
-      total: this.input.urls.length,
-    })
-  }
-
-  private rememberFailure(url: string, error: unknown): void {
+    const failure = { url, index, error, attempts }
     this.failed++
-    this.failedUrls.push(url)
-    if (this.input.collectFailureReasons && this.failedReasons.length < 3) {
-      const reason = error instanceof Error ? error.message : String(error)
-      this.failedReasons.push(`${url} => ${reason}`)
-    }
+    this.firstFailure ??= failure
+    this.input.onDownloadFailed(failure)
   }
 
   private async downloadOne(url: string, index: number): Promise<void> {
     const bytes: ImageByteState = { receivedBytes: 0, reservedBytes: 0 }
     let result: ChapterDownloadImageResult | undefined
+    let attempts = 0
     try {
       this.assertActive()
-      result = await this.downloadWithRetries(url, bytes)
+      result = await this.downloadWithRetries(url, bytes, (attempt) => {
+        attempts = attempt
+      })
       this.controller.signal.throwIfAborted()
       if (this.budget.failure)
         throw new ChapterResourceLimitError(this.budget.failure)
@@ -327,19 +320,20 @@ class ChapterImageBatch {
       this.input.onImageDownloaded?.()
     } catch (error) {
       this.budget.release(bytes)
-      this.recordFailure(url, index, error)
+      if (this.input.stopOnFailure && this.controller.signal.aborted) return
+      this.recordFailure(url, index, error, attempts)
     } finally {
       result?.liveResourceLease.release()
-      this.processed++
-      const pct = Math.max(
-        10,
-        Math.round((this.processed / this.input.urls.length) * 100)
-      )
-      await this.input.onProgress(pct, undefined, {
-        current: this.processed,
-        total: this.input.urls.length,
-      })
     }
+    this.processed++
+    const pct = Math.max(
+      10,
+      Math.round((this.processed / this.input.urls.length) * 100)
+    )
+    await this.input.onProgress(pct, undefined, {
+      current: this.processed,
+      total: this.input.urls.length,
+    })
   }
 }
 

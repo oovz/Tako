@@ -239,14 +239,17 @@ export class OffscreenWorker {
   private async withImageRetries<T>(
     job: JobExecutionContext,
     fn: () => Promise<T>,
-    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
-    signal?: AbortSignal
+    hooks:
+      | { onAttemptStart?: (attempt: number) => void | Promise<void> }
+      | undefined,
+    signal: AbortSignal,
+    options?: { retryNotFound: boolean }
   ): Promise<T> {
     if (job.handlesOwnRetries) {
       await hooks?.onAttemptStart?.(1)
       return fn()
     }
-    return withRetries(fn, job.retries.image, 1000, hooks, signal)
+    return withRetries(fn, job.retries.image, 1000, hooks, signal, options)
   }
 
   private async requestBrowserBlobDownload(input: {
@@ -971,7 +974,8 @@ export class OffscreenWorker {
             }
           | undefined,
         signal: AbortSignal
-      ) => this.withImageRetries(job, fn, hooks, signal),
+      ) =>
+        this.withImageRetries(job, fn, hooks, signal, { retryNotFound: true }),
       resolveWritableDownloadRoot: async () => {
         const captured = await writableRoot
         if (!captured) throw new Error("Custom folder is not configured")

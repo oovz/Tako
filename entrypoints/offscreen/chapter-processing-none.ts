@@ -274,8 +274,16 @@ export class NoneFormatChapterOutput {
       downloadImage: this.input.downloadImage,
       initialAggregateBytes: this.opts.coverImage?.data.byteLength ?? 0,
       onDownloaded: (image) => this.savePage(image),
-      onDownloadFailed: ({ url, error }) =>
-        logger.warn(`⚠️ Image download failed (skipped): ${url}`, error),
+      onDownloadFailed: ({ url, error, index, attempts }) =>
+        logger.warn("Loose image failed", {
+          taskId: this.opts.taskId,
+          chapterId: this.opts.chapter.id,
+          integrationId: this.input.integrationId,
+          page: index + 1,
+          url,
+          attempts,
+          error,
+        }),
       isFatalError: (error) => error instanceof FsaWriteError,
     })
   }

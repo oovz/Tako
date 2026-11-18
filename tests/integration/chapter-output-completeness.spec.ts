@@ -483,6 +483,52 @@ describe("complete chapter output", () => {
     }
   )
 
+  it("cancels running and queued archive pages after a required page fails", async () => {
+    const f = fixture("cbz", "browser", 0, 2)
+    const started = Promise.withResolvers<AbortSignal>()
+    const release = Promise.withResolvers<void>()
+    const imageFn: ChapterDownloadImageFn = vi.fn(async (url, options) => {
+      if (url === URLS[0]) {
+        await started.promise
+        throw new Error("HTTP 404")
+      }
+      if (url === URLS[1]) {
+        const signal = options.signal!
+        signal.addEventListener("abort", () => release.resolve(), {
+          once: true,
+        })
+        started.resolve(signal)
+        await release.promise
+        signal.throwIfAborted()
+      }
+      return {
+        filename: "page.png",
+        mimeType: "image/png",
+        data: PAGE.slice().buffer,
+        liveResourceLease: f.ledger.reserve(PAGE.byteLength, "page buffer"),
+      }
+    })
+    const outcome = f.process(imageFn)
+    const activeSignal = await started.promise
+    try {
+      await vi.waitFor(() => expect(activeSignal.aborted).toBe(true), {
+        timeout: 300,
+      })
+    } finally {
+      release.resolve()
+      await outcome
+    }
+    expect(imageFn).toHaveBeenCalledTimes(2)
+    expect(await outcome).toMatchObject({
+      status: "failed",
+      imagesFailed: 1,
+      errorMessage: expect.stringContaining("HTTP 404"),
+      outputsCommitted: 0,
+    })
+    expect(await f.outputBytes()).toEqual([])
+    expect(f.ledger.getUsedBytes()).toBe(0)
+  })
+
   it.each(["browser", "custom"] as const)(
     "retains valid loose files when an empty page fails in %s mode",
     async (mode) => {

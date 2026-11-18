@@ -67,45 +67,25 @@ function logArchiveMemory(runtime: ChapterProcessingRuntime): void {
     )
 }
 
-function logArchiveBatch({
-  total,
-  succeeded,
-  failed,
-  failedUrls,
-}: ArchiveImageBatch): void {
-  if (failed > 0) {
-    logger.warn(
-      `📦 Finalizing archive: ${succeeded}/${total} images succeeded, ${failed} failed`
-    )
-    if (failedUrls.length > 0) {
-      logger.warn(
-        `⚠️ Some images failed to download: ${failedUrls.length}/${total}`
-      )
-      logger.warn("   First 10 failed URLs:", failedUrls.slice(0, 10))
-    }
-  } else {
-    logger.debug(
-      `📦 Finalizing archive: ${succeeded}/${total} images downloaded successfully`
-    )
-  }
-}
-
 function incompleteArchiveOutcome(
   input: ArchiveFormatChapterInput,
-  batch: ArchiveImageBatch
+  batch: ArchiveImageBatch,
+  { url, error }: NonNullable<ArchiveImageBatch["firstFailure"]>
 ): ChapterOutcome {
-  const { total, succeeded, failed, failedUrls, failedReasons } = batch
-  const reasons =
-    failedReasons.length > 0 ? ` reasons: ${failedReasons.join(" | ")}` : ""
-  const message = `Image download failed: ${failed}/${total} images could not be downloaded${reasons} (${failedUrls.slice(0, 3).join(", ")}${failed > 3 ? "..." : ""})`
-  logger.error(
-    "❌ Chapter failed due to image failure(s) - discarding partial archive"
-  )
-  logger.error(`   Chapter: ${input.opts.chapter.title}`)
-  logger.error(
-    `   Format: ${input.opts.format} (archive format - partial archives not allowed)`
-  )
-  logger.error(`   ${succeeded}/${total} succeeded, ${failed} failed`)
+  const { total, succeeded, failed } = batch
+  const skipped = total - succeeded - failed
+  const reason = error instanceof Error ? error.message : String(error)
+  const remaining = skipped > 0 ? `, ${skipped} canceled` : ""
+  const message = `Image download failed: ${failed}/${total} images could not be downloaded${remaining}. ${reason} (${url})`
+  logger.warn("Discarded incomplete chapter archive", {
+    taskId: input.opts.taskId,
+    chapterId: input.opts.chapter.id,
+    format: input.opts.format,
+    total,
+    succeeded,
+    failed,
+    skipped,
+  })
   return {
     status: "failed",
     errorMessage: redactDiagnosticText(message),
@@ -219,7 +199,7 @@ export class ArchiveFormatChapterOutput {
       downloadImage: this.input.downloadImage,
       initialAggregateBytes: this.opts.coverImage?.data.byteLength ?? 0,
       mapImageIndex: (index) => index + this.coverCount,
-      collectFailureReasons: true,
+      stopOnFailure: true,
       onDownloaded: ({ index, result }) => {
         const buffer = result.data
         session.post(
@@ -235,12 +215,16 @@ export class ArchiveFormatChapterOutput {
           result.liveResourceLease
         )
       },
-      onDownloadFailed: ({ url, error, failedCount, total }) => {
-        logger.warn(
-          `⚠️ Image download failed (${failedCount}/${total}): ${url}`,
-          error
-        )
-      },
+      onDownloadFailed: ({ url, error, index, attempts }) =>
+        logger.warn("Required archive image failed", {
+          taskId: this.opts.taskId,
+          chapterId: this.opts.chapter.id,
+          integrationId: this.input.integrationId,
+          page: index - this.coverCount + 1,
+          url,
+          attempts,
+          error,
+        }),
     }).catch((error: unknown) => {
       session.failureSignal.throwIfAborted()
       throw error
@@ -296,10 +280,11 @@ export class ArchiveFormatChapterOutput {
     this.prepareInputs(session)
     const batch = await this.downloadImages(session, signal)
     session.failureSignal.throwIfAborted()
+    this.assertActive()
+    if (batch.firstFailure)
+      return incompleteArchiveOutcome(this.input, batch, batch.firstFailure)
     await this.opts.onArchiveProgress(90, "finalizing")
     this.assertActive()
-    logArchiveBatch(batch)
-    if (batch.failed > 0) return incompleteArchiveOutcome(this.input, batch)
     const result = await this.finalize(session, batch)
     this.resultLease = result.liveResourceLease
     this.validateArchive(result, batch)

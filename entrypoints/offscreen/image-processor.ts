@@ -107,16 +107,23 @@ function waitForRetryDelay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-function shouldRetryImageFailure(
+function shouldRetryFailure(
   error: unknown,
   attempt: number,
-  maxAttempts: number
+  maxAttempts: number,
+  retryNotFound: boolean
 ): boolean {
   if (isCancellationError(error) || isNonRetryableDownloadError(error))
     return false
   if (attempt === maxAttempts) return false
   const status = getHttpStatusFromError(error)
-  return status === null || status < 400 || status >= 500 || status === 429
+  return (
+    status === null ||
+    status < 400 ||
+    status >= 500 ||
+    status === 429 ||
+    (retryNotFound && status === 404)
+  )
 }
 
 async function withRetries<T>(
@@ -124,7 +131,8 @@ async function withRetries<T>(
   retries: number,
   baseDelayMs = 1000,
   hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  { retryNotFound = false } = {}
 ): Promise<T> {
   const maxAttempts = Math.max(0, Math.trunc(retries)) + 1
 
@@ -134,7 +142,8 @@ async function withRetries<T>(
       await hooks?.onAttemptStart?.(attempt)
       return await fn()
     } catch (error) {
-      if (!shouldRetryImageFailure(error, attempt, maxAttempts)) throw error
+      if (!shouldRetryFailure(error, attempt, maxAttempts, retryNotFound))
+        throw error
       const delay = baseDelayMs * Math.pow(3, attempt - 1)
       await waitForRetryDelay(delay, signal)
     }
