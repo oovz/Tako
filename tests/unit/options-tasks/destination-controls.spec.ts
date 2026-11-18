@@ -144,7 +144,11 @@ it("returns the user to the Chrome prompt after a temporary folder grant", async
 it("shows the restart tip when Chrome needs to prompt for the saved folder", async () => {
   const properties = {
     ...props("file-system-access"),
-    folderSetup: { handleId: "captured", finish: vi.fn(async () => {}) },
+    folderSetup: {
+      handleId: "captured",
+      disabled: false,
+      finish: vi.fn(async () => {}),
+    },
   }
   const restartTip = t("options_folderSetupRestartTip")
 
