@@ -104,17 +104,22 @@ describe("HTTP response ownership", () => {
         canceled = true
       },
     })
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(body, {
-            headers: { "content-type": "application/json" },
-          })
-      )
+    const fetch = vi.fn(
+      async () =>
+        new Response(body, {
+          headers: { "content-type": "application/json" },
+        })
     )
-    const response = await integrationHttpClient.request(request)
+    vi.stubGlobal("fetch", fetch)
+    const response = await integrationHttpClient.request({
+      ...request,
+      init: { cache: "force-cache" },
+    })
     await expect(response.json()).resolves.toEqual({ ok: true })
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      url,
+      expect.objectContaining({ cache: "no-store" })
+    )
     expect(canceled).toBe(false)
   })
 

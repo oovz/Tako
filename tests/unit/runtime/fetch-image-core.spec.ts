@@ -21,6 +21,25 @@ function responseForReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
 }
 
 describe("fetch image stream cleanup", () => {
+  it("bypasses the browser HTTP cache for custom image fetchers", async () => {
+    const imageUrl = "https://images.example/page.jpg"
+    const fetcher = vi.fn(
+      async () =>
+        new Response(new Uint8Array([1]), {
+          headers: { "content-type": "image/jpeg" },
+        })
+    )
+
+    await fetchImageWithStallDetection(imageUrl, {
+      fetcher,
+      init: { cache: "force-cache" },
+    })
+
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      imageUrl,
+      expect.objectContaining({ cache: "no-store" })
+    )
+  })
   it.each(["stream", "arrayBuffer"])(
     "rejects an empty %s response as retryable and releases its resources",
     async (bodyMode) => {

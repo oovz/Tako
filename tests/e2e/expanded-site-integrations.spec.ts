@@ -30,6 +30,7 @@ import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mang
 import { boyloveFixture } from "./fixtures/mock-data/site-integrations/boylove/routes"
 import { copyFixture } from "./fixtures/mock-data/site-integrations/copymanga/routes"
 import { mycomicFixture } from "./fixtures/mock-data/site-integrations/mycomic/routes"
+import { pngResponse } from "./fixtures/mock-data/site-integrations/expanded-site-fixture"
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 import { zaimanhuaFixture } from "./fixtures/mock-data/site-integrations/mangaagain/routes"
@@ -62,10 +63,26 @@ test.describe("site downloads through the chapter selector", () => {
   for (const { testCase: fixture } of fixtures) {
     for (const seriesUrl of [fixture.seriesUrl, ...(fixture.aliases ?? [])]) {
       test(`${fixture.id} selects and saves a chapter on ${new URL(seriesUrl).hostname}`, async ({
+        _extensionContextState,
         context,
         extensionId,
         page,
       }, testInfo) => {
+        let mycomicFirstPageRequests = 0
+        if (fixture.id === "mycomic") {
+          _extensionContextState.localMockServer!.addRoute(
+            `/__expanded/mycomic/1/chapters/${fixture.chapterId}`,
+            ({ pathnameAfterPrefix }) =>
+              pathnameAfterPrefix.startsWith("/1-") &&
+              ++mycomicFirstPageRequests === 1
+                ? {
+                    status: 404,
+                    headers: { "cache-control": "max-age=600" },
+                    body: "Image not found",
+                  }
+                : pngResponse()
+          )
+        }
         await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
         const tabId = await getTabId(page, context)
         await waitForTabSeriesTitle(context, tabId, fixture.title)
@@ -171,6 +188,7 @@ test.describe("site downloads through the chapter selector", () => {
           )!.id
           const task = await waitForTerminalTask(context, id)
           assertTaskSucceeded(task)
+          if (fixture.id === "mycomic") expect(mycomicFirstPageRequests).toBe(2)
           expect(task.chapters[0]).toMatchObject({
             id: fixture.chapterId,
             totalImages: fixture.pageCount,

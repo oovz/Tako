@@ -154,6 +154,7 @@ export const integrationHttpClient = {
     )
     const init: RequestInit = {
       ...input.init,
+      cache: "no-store",
       credentials: endpoint.credentials,
       redirect: allowsDeterministicE2eRedirect ? "follow" : endpoint.redirect,
     }

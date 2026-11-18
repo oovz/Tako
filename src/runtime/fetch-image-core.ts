@@ -102,6 +102,7 @@ async function fetchImageResponse(
     // Session-dependent integrations opt in to credentials at the call site.
     credentials: "omit",
     ...options.init,
+    cache: "no-store",
     // Fail before contacting a redirect target or sending credentials to it.
     redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
     signal: controller.signal,
