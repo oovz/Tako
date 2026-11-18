@@ -97,6 +97,7 @@ export interface ServiceWorkerIntegration<
 export interface ChapterRuntimeData {
   chapterId?: string
   retrySettings?: TaskSettingsSnapshot["retrySettings"]
+  onImageRetry?: () => void
   rateLimitService: RateLimitService
   rateLimitSettings: {
     image: RateScopePolicy

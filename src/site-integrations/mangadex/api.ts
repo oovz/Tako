@@ -308,7 +308,7 @@ const shouldRetryTransientResponse = (
   }
 }
 
-export type MangadexRetryBudget = { remaining: number }
+export type MangadexRetryBudget = { remaining: number; onRetry?: () => void }
 
 type MangadexRequestAttempt = {
   url: string
@@ -344,6 +344,7 @@ async function retryMangadexRequest(
   response?: Response
 ): Promise<Response> {
   attempt.budget.remaining--
+  attempt.budget.onRetry?.()
   logger.warn(`[mangadex] ${reason}, retrying in ${delay}ms`, {
     retriesRemaining: attempt.budget.remaining,
   })

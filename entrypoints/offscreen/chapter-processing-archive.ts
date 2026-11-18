@@ -188,6 +188,7 @@ export class ArchiveFormatChapterOutput {
   ): Promise<ArchiveImageBatch> {
     return downloadChapterImages(this.runtime, {
       urls: this.input.urls,
+      taskId: this.opts.taskId,
       integrationId: this.input.integrationId,
       chapterId: this.opts.chapter.id,
       integrationContext: this.opts.integrationContext,

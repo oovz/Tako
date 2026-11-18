@@ -17,6 +17,7 @@ import {
   assertTaskSucceeded,
   openOptionsPage,
   persistDownloadSettings,
+  startSingleChapterDownload,
   waitForBrowserDownloadArtifact,
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
@@ -40,6 +41,8 @@ import { mangagoFixture } from "./fixtures/mock-data/site-integrations/mangago/r
 import { coolmicFixture } from "./fixtures/mock-data/site-integrations/coolmic/routes"
 import { mangaplusFixture } from "./fixtures/mock-data/site-integrations/mangaplus/routes"
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
+import { createCommandEnvelope } from "@/src/runtime/command-envelope"
+import { readRetainedDiagnostics } from "./fixtures/retained-diagnostics"
 
 const fixtures = [
   manganatoFixture,
@@ -255,6 +258,92 @@ test.describe("site downloads through the chapter selector", () => {
         }
       })
     }
+  }
+})
+
+test("retries and logs a missing MyComic page before stopping the Chrome archive", async ({
+  _extensionContextState,
+  context,
+  extensionId,
+  page,
+}) => {
+  const fixture = mycomicFixture.testCase
+  const requestedPages: number[] = []
+  _extensionContextState.localMockServer!.addRoute(
+    `/__expanded/mycomic/1/chapters/${fixture.chapterId}`,
+    ({ pathnameAfterPrefix }) => {
+      const pageNumber = Number(/^\/(\d+)-/.exec(pathnameAfterPrefix)?.[1])
+      requestedPages.push(pageNumber)
+      return pageNumber === 2
+        ? { status: 404, body: "Page unavailable" }
+        : pngResponse()
+    }
+  )
+  await page.goto(fixture.seriesUrl, { waitUntil: "domcontentloaded" })
+  const tabId = await getTabId(page, context)
+  const state = await waitForTabStateById(page, context, tabId, (candidate) =>
+    candidate.chapters.some((chapter) => chapter.id === fixture.chapterId)
+  )
+  const options = await openOptionsPage(context, extensionId)
+  try {
+    await persistDownloadSettings(options, {
+      destination: "downloads-api",
+      customDirectoryHandleId: null,
+      defaultFormat: "cbz",
+      includeCoverImage: false,
+    })
+    await options.evaluate(async (command) => {
+      const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "GET_OPTIONS_CONFIGURATION",
+        })
+      if (!current.success) throw new Error(current.error)
+      const configuration = current.data.configuration
+      configuration.overrides.mycomic = {
+        imagePolicy: { concurrency: 1 },
+        retries: { image: 1 },
+      }
+      const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "SAVE_OPTIONS_CONFIGURATION",
+          ...command,
+          payload: { configuration },
+        })
+      if (!saved.success) throw new Error(saved.error)
+    }, createCommandEnvelope())
+
+    const taskId = await startSingleChapterDownload(options, {
+      sourceTabId: tabId,
+      siteIntegrationId: fixture.id,
+      mangaId: fixture.seriesId,
+      seriesTitle: fixture.title,
+      chapter: state.chapters.find(
+        (chapter) => chapter.id === fixture.chapterId
+      )!,
+    })
+    const task = await waitForTerminalTask(context, taskId)
+    expect(task).toMatchObject({
+      status: "failed",
+      chapters: [{ outputs: { committed: 0, failed: 1, requested: 1 } }],
+    })
+    expect(requestedPages).toEqual([1, 2, 2])
+    const report = await readRetainedDiagnostics(context, extensionId)
+    expect(report.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: "Chapter image retry scheduled",
+          details: expect.objectContaining({
+            page: 2,
+            nextAttempt: 2,
+            maxAttempts: 2,
+          }),
+        }),
+      ])
+    )
+  } finally {
+    await options.close()
   }
 })
 

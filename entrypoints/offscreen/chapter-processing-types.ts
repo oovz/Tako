@@ -9,6 +9,7 @@ import type {
 } from "@/src/runtime/offscreen-live-resource-ledger"
 import type { JsonObject } from "@/src/types/site-integrations"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import type { RetryHooks } from "./image-processor"
 
 export type ChapterOutcomeStatus = "completed" | "partial_success" | "failed"
 
@@ -116,9 +117,7 @@ export interface ChapterProcessingRuntime {
   rateLimitService: RateLimitService
   withImageRetries: <T>(
     fn: () => Promise<T>,
-    hooks:
-      | { onAttemptStart?: (attempt: number) => void | Promise<void> }
-      | undefined,
+    hooks: RetryHooks | undefined,
     signal: AbortSignal
   ) => Promise<T>
   resolveWritableDownloadRoot: (

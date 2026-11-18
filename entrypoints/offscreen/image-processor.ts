@@ -16,6 +16,7 @@ export { fetchImageWithStallDetection }
 class PromiseQueue {
   private maxConcurrent: number
   private running: number
+  private paused = false
   private queue: Array<{
     task: () => Promise<unknown>
     resolve: (value: unknown) => void
@@ -48,20 +49,41 @@ class PromiseQueue {
     return pending.length
   }
 
-  private _runNext(): void {
-    if (this.running >= this.maxConcurrent || this.queue.length === 0) {
-      return
-    }
-
-    const { task, resolve, reject } = this.queue.shift()!
-    this.running++
-
-    const promise = task()
-    promise.then(resolve, reject).finally(() => {
-      this.running--
-      this._runNext()
-    })
+  pause(): void {
+    this.paused = true
   }
+
+  resume(): void {
+    this.paused = false
+    this._runNext()
+  }
+
+  private _runNext(): void {
+    while (
+      !this.paused &&
+      this.running < this.maxConcurrent &&
+      this.queue.length > 0
+    ) {
+      const { task, resolve, reject } = this.queue.shift()!
+      this.running++
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          this.running--
+          this._runNext()
+        })
+    }
+  }
+}
+
+export type RetryHooks = {
+  onAttemptStart?: (attempt: number) => void | Promise<void>
+  onRetry?: (retry: {
+    error: unknown
+    nextAttempt: number
+    maxAttempts: number
+    delayMs: number
+  }) => void
 }
 
 /**
@@ -130,7 +152,7 @@ async function withRetries<T>(
   fn: () => Promise<T>,
   retries: number,
   baseDelayMs = 1000,
-  hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+  hooks?: RetryHooks,
   signal?: AbortSignal,
   { retryNotFound = false } = {}
 ): Promise<T> {
@@ -145,6 +167,12 @@ async function withRetries<T>(
       if (!shouldRetryFailure(error, attempt, maxAttempts, retryNotFound))
         throw error
       const delay = baseDelayMs * Math.pow(3, attempt - 1)
+      hooks?.onRetry?.({
+        error,
+        nextAttempt: attempt + 1,
+        maxAttempts,
+        delayMs: delay,
+      })
       await waitForRetryDelay(delay, signal)
     }
   }

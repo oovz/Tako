@@ -308,6 +308,7 @@ async function recoverMangadexChapterImage(
     if (opts.signal?.aborted)
       throw new Error("aborted", { cause: originalError })
     budget.remaining--
+    budget.onRetry?.()
     cycle++
     const candidate = await refreshMangadexRecoveryCandidate(
       source,
@@ -360,6 +361,7 @@ export async function downloadMangadexChapterImage(
   })
   const budget = {
     remaining: opts.runtime.retrySettings?.image ?? MANGADEX_DEFAULT_RETRIES,
+    onRetry: opts.runtime.onImageRetry,
   }
   try {
     return await fetchMangadexImageAsset(

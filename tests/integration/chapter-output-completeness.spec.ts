@@ -15,6 +15,7 @@ import { withRetries } from "@/entrypoints/offscreen/image-processor"
 import { downloadManhuaguiChapterImage } from "@/src/site-integrations/readmanga/chapter-api"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import { RateLimitService } from "@/src/runtime/rate-limit"
+import logger from "@/src/runtime/logger"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { SHONEN_JUMP_PLUS_SCRAMBLED_PNG } from "@/tests/e2e/fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
@@ -528,6 +529,59 @@ describe("complete chapter output", () => {
     expect(await f.outputBytes()).toEqual([])
     expect(f.ledger.getUsedBytes()).toBe(0)
   })
+
+  it.each([false, true])(
+    "holds new archive requests during a page retry and resumes only if it recovers (%s)",
+    async (recovers) => {
+      vi.useFakeTimers()
+      const f = fixture("cbz", "browser", 1, 2)
+      f.runtime.withImageRetries = (fn, hooks, signal) =>
+        withRetries(fn, 1, 1000, hooks, signal, { retryNotFound: true })
+      let pageAttempts = 0
+      const fetch = vi.fn(async (url: string) => {
+        if (url === URLS[0] && (++pageAttempts === 1 || !recovers))
+          return new Response(null, { status: 404 })
+        return new Response(PAGE.slice(), {
+          headers: { "content-type": "image/png" },
+        })
+      })
+      vi.stubGlobal("fetch", fetch)
+      const warn = vi.spyOn(logger, "warn")
+      const result = f.process()
+      try {
+        await vi.advanceTimersByTimeAsync(100)
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual(URLS.slice(0, 2))
+        expect(warn).toHaveBeenCalledWith(
+          "Chapter image retry scheduled",
+          expect.objectContaining({
+            taskId: f.opts.taskId,
+            chapterId: f.opts.chapter.id,
+            page: 1,
+            nextAttempt: 2,
+            maxAttempts: 2,
+            delayMs: 1000,
+            error: expect.objectContaining({ status: 404 }),
+          })
+        )
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(await result).toMatchObject({
+          status: recovers ? "completed" : "failed",
+        })
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+          ...URLS.slice(0, 2),
+          URLS[0],
+          ...(recovers ? URLS.slice(2) : []),
+        ])
+        expect(f.handoffs).toHaveLength(recovers ? 1 : 0)
+        expect(f.ledger.getUsedBytes()).toBe(0)
+      } finally {
+        await vi.advanceTimersByTimeAsync(2000)
+        await result
+        vi.useRealTimers()
+        warn.mockRestore()
+      }
+    }
+  )
 
   it.each(["browser", "custom"] as const)(
     "retains valid loose files when an empty page fails in %s mode",

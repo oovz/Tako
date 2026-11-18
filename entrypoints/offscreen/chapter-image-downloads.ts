@@ -3,7 +3,7 @@ import type {
   RateLimitPolicySnapshot,
   RateLimitService,
 } from "@/src/runtime/rate-limit"
-import { PromiseQueue } from "./image-processor"
+import { PromiseQueue, type RetryHooks } from "./image-processor"
 import type {
   ChapterDownloadImageFn,
   ChapterDownloadImageResult,
@@ -42,6 +42,7 @@ type DownloadChapterImageFailure = {
 
 type DownloadChapterImagesOptions = {
   urls: string[]
+  taskId?: string
   integrationId: string
   chapterId: string
   integrationContext?: JsonObject
@@ -138,6 +139,7 @@ class ChapterImageBatch {
   private readonly queue: PromiseQueue
   private readonly budget: ChapterImageByteBudget
   private readonly controller = new AbortController()
+  private readonly retryingImages = new Set<number>()
   private processed = 0
   private succeeded = 0
   private failed = 0
@@ -169,7 +171,9 @@ class ChapterImageBatch {
           ? this.input.mapImageIndex(index)
           : index
         tasks.push(
-          this.queue.add(() => this.downloadOne(urls[index], imageIndex))
+          this.queue.add(() =>
+            this.downloadOne(urls[index], imageIndex, index + 1)
+          )
         )
       }
       await Promise.allSettled(tasks)
@@ -230,7 +234,8 @@ class ChapterImageBatch {
 
   private async fetchImage(
     url: string,
-    state: ImageByteState
+    state: ImageByteState,
+    onImageRetry: () => void
   ): Promise<ChapterDownloadImageResult> {
     this.assertActive()
     const image = await this.input.downloadImage(url, {
@@ -240,6 +245,7 @@ class ChapterImageBatch {
         rateLimitSettings: this.input.rateLimitSettings,
         chapterId: this.input.chapterId,
         rateLimitService: this.input.rateLimitService,
+        onImageRetry,
       },
       onBytesReceived: (bytes) => this.reportImageBytes(state, bytes),
       liveResourceLedger: this.runtime.liveResourceLedger,
@@ -256,20 +262,22 @@ class ChapterImageBatch {
   private downloadWithRetries(
     url: string,
     state: ImageByteState,
-    onAttemptStart: (attempt: number) => void
+    hooks: RetryHooks,
+    onImageRetry: () => void
   ): Promise<ChapterDownloadImageResult> {
     return this.runtime.withImageRetries(
       () =>
         this.input.rateLimitService.scheduleForIntegrationScope(
           this.input.integrationId,
           "image",
-          () => this.fetchImage(url, state),
+          () => this.fetchImage(url, state, onImageRetry),
           this.input.rateLimitSettings.image
         ),
       {
+        onRetry: hooks.onRetry,
         onAttemptStart: async (attempt) => {
           this.assertActive()
-          onAttemptStart(attempt)
+          await hooks.onAttemptStart?.(attempt)
           if (attempt > 1) this.budget.release(state)
           await this.emitInFlightProgress()
         },
@@ -296,15 +304,43 @@ class ChapterImageBatch {
     this.input.onDownloadFailed(failure)
   }
 
-  private async downloadOne(url: string, index: number): Promise<void> {
+  private async downloadOne(
+    url: string,
+    index: number,
+    page: number
+  ): Promise<void> {
     const bytes: ImageByteState = { receivedBytes: 0, reservedBytes: 0 }
     let result: ChapterDownloadImageResult | undefined
     let attempts = 0
+    const pauseForRetry = () => {
+      if (this.input.stopOnFailure) {
+        this.retryingImages.add(page)
+        this.queue.pause()
+      }
+    }
     try {
       this.assertActive()
-      result = await this.downloadWithRetries(url, bytes, (attempt) => {
-        attempts = attempt
-      })
+      result = await this.downloadWithRetries(
+        url,
+        bytes,
+        {
+          onAttemptStart: (attempt) => {
+            attempts = attempt
+          },
+          onRetry: (retry) => {
+            pauseForRetry()
+            logger.warn("Chapter image retry scheduled", {
+              taskId: this.input.taskId,
+              chapterId: this.input.chapterId,
+              integrationId: this.input.integrationId,
+              page,
+              url,
+              ...retry,
+            })
+          },
+        },
+        pauseForRetry
+      )
       this.controller.signal.throwIfAborted()
       if (this.budget.failure)
         throw new ChapterResourceLimitError(this.budget.failure)
@@ -324,6 +360,12 @@ class ChapterImageBatch {
       this.recordFailure(url, index, error, attempts)
     } finally {
       result?.liveResourceLease.release()
+      if (
+        this.retryingImages.delete(page) &&
+        this.retryingImages.size === 0 &&
+        !this.controller.signal.aborted
+      )
+        this.queue.resume()
     }
     this.processed++
     const pct = Math.max(

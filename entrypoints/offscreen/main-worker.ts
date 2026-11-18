@@ -9,7 +9,7 @@ import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
 } from "@/src/runtime/runtime-message-contracts"
-import { withRetries } from "./image-processor"
+import { withRetries, type RetryHooks } from "./image-processor"
 import { offscreenSiteAdaptersById } from "@/src/runtime/generated/site-integration-offscreen-registry"
 import { getDefinition, isEnabled } from "@/src/site-integrations/catalog"
 import {
@@ -239,9 +239,7 @@ export class OffscreenWorker {
   private async withImageRetries<T>(
     job: JobExecutionContext,
     fn: () => Promise<T>,
-    hooks:
-      | { onAttemptStart?: (attempt: number) => void | Promise<void> }
-      | undefined,
+    hooks: RetryHooks | undefined,
     signal: AbortSignal
   ): Promise<T> {
     if (job.handlesOwnRetries) {
@@ -977,11 +975,7 @@ export class OffscreenWorker {
       rateLimitService,
       withImageRetries: <T>(
         fn: () => Promise<T>,
-        hooks:
-          | {
-              onAttemptStart?: (attempt: number) => void | Promise<void>
-            }
-          | undefined,
+        hooks: RetryHooks | undefined,
         signal: AbortSignal
       ) => this.withImageRetries(job, fn, hooks, signal),
       resolveWritableDownloadRoot: async () => {
