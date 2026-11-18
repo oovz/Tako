@@ -55,6 +55,11 @@ export function DownloadFolderSetup({
           {t(folderSetupMessage(result))}
         </p>
       )}
+      {folderAccessRequired && (
+        <p className="text-muted-foreground">
+          {t("options_folderSetupRestartTip")}
+        </p>
+      )}
       {folderSetup.disabled && (
         <p className="text-muted-foreground">
           {t("options_folderSetupSaveChanges")}

@@ -126,6 +126,7 @@ it("returns the user to the Chrome prompt after a temporary folder grant", async
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       t("options_folderSetupTemporary")
     )
+    expect(container.textContent).toContain(t("options_folderSetupRestartTip"))
     expect(window.location.search).toBe("?tab=storage")
 
     await render({
@@ -138,6 +139,20 @@ it("returns the user to the Chrome prompt after a temporary folder grant", async
   } finally {
     window.history.replaceState(null, "", previousUrl)
   }
+})
+
+it("shows the restart tip when Chrome needs to prompt for the saved folder", async () => {
+  const properties = {
+    ...props("file-system-access"),
+    folderSetup: { handleId: "captured", finish: vi.fn(async () => {}) },
+  }
+  const restartTip = t("options_folderSetupRestartTip")
+
+  await render({ ...properties, folderAccessRequired: false })
+  expect(container.textContent).not.toContain(restartTip)
+
+  await render({ ...properties, folderAccessRequired: true })
+  expect(container.textContent).toContain(restartTip)
 })
 
 it("shows setup success for the verified folder until a different folder is selected", async () => {

@@ -708,7 +708,7 @@
     "message": "Finish folder setup"
   },
   "options_folderSetupInstructions": {
-    "message": "Finish setup before downloading to this folder. This tab will briefly switch pages and return automatically. If Chrome asks for access again, choose $CHOICE$.",
+    "message": "Finish setup before downloading to this folder. This tab will briefly switch pages and return automatically. Choose $CHOICE$ when Chrome offers it. If Chrome only offers Allow, choose it and open the prompt again when Options returns.",
     "placeholders": {
       "choice": {
         "content": "$1"
@@ -740,7 +740,10 @@
     "message": "Could not verify persistent folder access. Try again."
   },
   "options_folderSetupTemporary": {
-    "message": "Chrome granted temporary access. Open the prompt and choose Allow on every visit."
+    "message": "Chrome granted temporary access."
+  },
+  "options_folderSetupRestartTip": {
+    "message": "If Chrome keeps offering temporary access, quit Chrome completely and reopen it. Return to Options → Storage & Files and click Open Chrome permission prompt again."
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "No download folder selected"

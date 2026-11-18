@@ -708,7 +708,7 @@
     "message": "完成文件夹设置"
   },
   "options_folderSetupInstructions": {
-    "message": "下载到此文件夹前，请先完成设置。此标签页将短暂切换到其他页面，然后自动返回。如果 Chrome 再次请求访问权限，请选择 $CHOICE$。",
+    "message": "下载到此文件夹前，请先完成设置。此标签页将短暂切换到其他页面，然后自动返回。Chrome 显示 $CHOICE$ 时，请选择它。如果只显示「允许」，请选择它，等选项页返回后再打开权限提示。",
     "placeholders": {
       "choice": {
         "content": "$1"
@@ -740,7 +740,10 @@
     "message": "无法验证文件夹的持续访问权限。请重试。"
   },
   "options_folderSetupTemporary": {
-    "message": "Chrome 授予了临时访问权限。请打开权限提示并选择「每次访问时都允许」。"
+    "message": "Chrome 授予了临时访问权限。"
+  },
+  "options_folderSetupRestartTip": {
+    "message": "如果 Chrome 一直只提供临时访问权限，请完全退出 Chrome 后重新打开。回到「选项 → 存储与文件」，再次点击「打开 Chrome 权限提示」。"
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未选择下载文件夹"

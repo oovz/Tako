@@ -97,6 +97,9 @@ async function verifyFromNeutralPage(
     await completeFolderSetup(handleId)
     return "ready"
   }
+  // After a fresh install or reinstall, Chrome may offer temporary access
+  // even after all extension pages close. Restarting Chrome can restore the
+  // persistent choice. Keep setup pending while write access returns to prompt.
   if (permission === "prompt") return afterApproval ? "temporary" : undefined
   return "unavailable"
 }

@@ -708,7 +708,7 @@
     "message": "完成資料夾設定"
   },
   "options_folderSetupInstructions": {
-    "message": "下載到此資料夾前，請先完成設定。這個分頁會短暫切換至其他頁面，再自動返回。如果 Chrome 再次要求存取權限，請選擇 $CHOICE$。",
+    "message": "下載到此資料夾前，請先完成設定。這個分頁會短暫切換至其他頁面，再自動返回。Chrome 顯示 $CHOICE$ 時，請選擇它。如果只顯示「允許」，請選擇它，等選項頁返回後再開啟權限提示。",
     "placeholders": {
       "choice": {
         "content": "$1"
@@ -740,7 +740,10 @@
     "message": "無法驗證資料夾的持續存取權限。請再試一次。"
   },
   "options_folderSetupTemporary": {
-    "message": "Chrome 授予了暫時存取權限。請開啟權限提示並選擇「每次造訪時允許」。"
+    "message": "Chrome 授予了暫時存取權限。"
+  },
+  "options_folderSetupRestartTip": {
+    "message": "如果 Chrome 一直只提供暫時存取權限，請完全結束 Chrome 後重新開啟。回到「選項 → 儲存與檔案」，再次點擊「開啟 Chrome 權限提示」。"
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未選擇下載資料夾"

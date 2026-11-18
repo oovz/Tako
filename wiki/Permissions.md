@@ -34,7 +34,9 @@ Optional website access that is no longer needed is removed when you disable the
 
 ## Folder access
 
-Choose a custom folder in **Options → Storage & Files**, click **Save Changes**, and finish folder setup. When Chrome asks for access again, choose **Allow on every visit**. Once Tako verifies access, downloads can save to the folder and its subfolders after you close Options.
+Choose a custom folder in **Options → Storage & Files**, click **Save Changes**, and finish folder setup. Choose **Allow on every visit** when Chrome offers it. **Folder ready** confirms access stays granted after you close Options.
+
+After installing or reinstalling Tako, Chrome may need a full browser restart before it offers **Allow on every visit**. If Chrome offers only **Allow** and **Don't allow**, choose **Allow** and open the prompt again when Options returns. If Chrome still offers temporary access, quit Chrome completely and reopen it. Return to **Options → Storage & Files**, click **Open Chrome permission prompt**, and choose **Allow on every visit**.
 
 Changing the default folder affects new tasks. Existing tasks keep their original folder, and **Grant access again** renews access to that folder. See [Troubleshooting](Troubleshooting#folder-access-was-lost) if a task cannot save.
 

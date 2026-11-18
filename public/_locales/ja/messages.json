@@ -708,7 +708,7 @@
     "message": "フォルダーの設定を完了"
   },
   "options_folderSetupInstructions": {
-    "message": "このフォルダへのダウンロードを始める前に設定を完了してください。このタブは一時的に別のページに切り替わり、自動で戻ります。Chrome が再度アクセスを求めたら、$CHOICE$を選んでください。",
+    "message": "このフォルダへのダウンロードを始める前に設定を完了してください。このタブは一時的に別のページに切り替わり、自動で戻ります。Chrome に $CHOICE$ が表示されたら選んでください。「許可」しか表示されない場合は、許可してからオプションに戻り、確認をもう一度開いてください。",
     "placeholders": {
       "choice": {
         "content": "$1"
@@ -740,7 +740,10 @@
     "message": "フォルダーへの継続的なアクセスを確認できませんでした。もう一度お試しください。"
   },
   "options_folderSetupTemporary": {
-    "message": "Chrome で一時的なアクセスが許可されました。確認を開き、「サイトアクセス時は常に許可」を選んでください。"
+    "message": "Chrome で一時的なアクセスが許可されました。"
+  },
+  "options_folderSetupRestartTip": {
+    "message": "Chrome で一時的なアクセスしか許可されない場合は、Chrome を完全に終了してから開き直してください。オプションの「ストレージとファイル」に戻り、「Chrome の権限確認を開く」をもう一度クリックしてください。"
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "ダウンロードフォルダーが選択されていません"

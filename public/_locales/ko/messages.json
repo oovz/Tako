@@ -708,7 +708,7 @@
     "message": "폴더 설정 완료"
   },
   "options_folderSetupInstructions": {
-    "message": "이 폴더로 다운로드하기 전에 설정을 완료하세요. 이 탭은 잠시 다른 페이지로 이동한 뒤 자동으로 돌아옵니다. Chrome이 다시 액세스 권한을 요청하면 $CHOICE$을 선택하세요.",
+    "message": "이 폴더로 다운로드하기 전에 설정을 완료하세요. 이 탭은 잠시 다른 페이지로 이동한 뒤 자동으로 돌아옵니다. Chrome에 $CHOICE$ 옵션이 표시되면 선택하세요. ‘허용’만 표시되면 허용한 뒤 옵션으로 돌아와 권한 요청을 다시 여세요.",
     "placeholders": {
       "choice": {
         "content": "$1"
@@ -740,7 +740,10 @@
     "message": "지속적인 폴더 액세스를 확인하지 못했습니다. 다시 시도하세요."
   },
   "options_folderSetupTemporary": {
-    "message": "Chrome이 임시 액세스를 허용했습니다. 권한 요청을 열고 ‘방문할 때마다 허용’을 선택하세요."
+    "message": "Chrome이 임시 액세스를 허용했습니다."
+  },
+  "options_folderSetupRestartTip": {
+    "message": "Chrome이 임시 액세스만 허용하는 경우 Chrome을 완전히 종료한 뒤 다시 실행하세요. 옵션의 ‘저장 및 파일’로 돌아가 ‘Chrome 권한 요청 열기’를 다시 클릭하세요."
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "다운로드 폴더를 선택하지 않았습니다"
