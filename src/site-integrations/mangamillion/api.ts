@@ -280,8 +280,11 @@ async function requestMangaMillionApi(
         retryResponse,
         `MangaMillion API ${path} retry HTTP ${retryResponse.status}`
       )
-      throw new ProviderContractError(
-        `MangaMillion API ${path} failed with HTTP ${retryResponse.status} after re-registration.`
+      throw Object.assign(
+        new Error(
+          `MangaMillion API ${path} failed with HTTP ${retryResponse.status} after re-registration.`
+        ),
+        { status: retryResponse.status }
       )
     }
 
@@ -293,8 +296,11 @@ async function requestMangaMillionApi(
       response,
       `MangaMillion API ${path} HTTP ${response.status}`
     )
-    throw new ProviderContractError(
-      `MangaMillion API ${path} failed with HTTP ${response.status}.`
+    throw Object.assign(
+      new Error(
+        `MangaMillion API ${path} failed with HTTP ${response.status}.`
+      ),
+      { status: response.status }
     )
   }
 

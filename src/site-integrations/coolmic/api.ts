@@ -40,8 +40,9 @@ async function request(
   })
   if (!response.ok) {
     cancelResponseBody(response)
-    throw new ProviderContractError(
-      `Coolmic request failed (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(`Coolmic request failed (HTTP ${response.status}).`),
+      { status: response.status }
     )
   }
   return response

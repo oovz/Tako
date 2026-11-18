@@ -52,8 +52,9 @@ async function request(
   })
   if (!response.ok) {
     cancelResponseBody(response)
-    throw new ProviderContractError(
-      `MANGA Plus request failed (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(`MANGA Plus request failed (HTTP ${response.status}).`),
+      { status: response.status }
     )
   }
   return new Uint8Array(await response.arrayBuffer())
