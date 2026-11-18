@@ -513,6 +513,52 @@ test("uses shared macro shortcuts for a persisted site path override", async ({
   await expect(card.getByText("Override", { exact: true })).toHaveCount(0)
 })
 
+test("warns above the recommended MangaDex retry count and saves higher values", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=network`)
+  const globalRetries = page.getByRole("spinbutton", { name: "Image Retries" })
+  const recommendation =
+    "This exceeds the recommended limit of 3 retries for MangaDex."
+  await expect(globalRetries).toHaveValue("3")
+  await expect(page.getByText(recommendation)).toBeHidden()
+  await globalRetries.fill("4")
+  await expect(globalRetries).toHaveAccessibleDescription(recommendation)
+
+  await page
+    .getByRole("button", { name: "Site Integrations", exact: true })
+    .click()
+  await page.getByTestId("configure-site-integration-mangadex").click()
+  const card = page.getByTestId("site-integration-card-mangadex")
+  const imageRetries = card.getByRole("spinbutton", { name: "Image Retries" })
+  await expect(imageRetries).toHaveAccessibleDescription(
+    `Global Default ${recommendation}`
+  )
+  await imageRetries.fill("0")
+  await expect(imageRetries).toHaveAccessibleDescription("Override")
+  const chapterRetries = card.getByRole("spinbutton", {
+    name: "Chapter Retries",
+  })
+  await chapterRetries.fill("5")
+  await expect(chapterRetries).toHaveAccessibleDescription(
+    `Override ${recommendation}`
+  )
+
+  const save = page.getByRole("button", { name: "Save Changes", exact: true })
+  await save.click()
+  await expect(save).toBeHidden()
+  await page.reload()
+  await page.getByTestId("configure-site-integration-mangadex").click()
+  await expect(chapterRetries).toHaveValue("5")
+  await expect(imageRetries).toHaveValue("0")
+  await page
+    .getByRole("button", { name: "Network & Speed", exact: true })
+    .click()
+  await expect(globalRetries).toHaveValue("4")
+  await expect(page.getByText(recommendation)).toBeHidden()
+})
+
 test("edits MangaDex settings directly and clears shared overrides independently", async ({
   page,
   extensionId,

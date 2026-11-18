@@ -115,6 +115,8 @@ function OptionsTabContent({
       return (
         <NetworkTab
           settings={state.settingsBuffer}
+          overrides={state.overrides}
+          siteIntegrationEnablement={state.siteIntegrationEnablement}
           onChange={state.handleSettingsChange}
         />
       )

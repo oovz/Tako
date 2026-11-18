@@ -5,6 +5,11 @@ import React from "react"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import type {
+  SiteIntegrationEnablementMap,
+  SiteOverridesMap,
+} from "@/src/domain/site-integrations/storage-schemas"
+import { getDefinitions, isEnabled } from "@/src/site-integrations/catalog"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import { t } from "@/src/runtime/i18n"
 import {
@@ -14,13 +19,21 @@ import {
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
 import { SettingsRow } from "../components/primitives/SettingsRow"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
+import { RetryLimitWarning } from "../components/RetryLimitWarning"
 
 interface NetworkTabProps {
   settings: ExtensionSettings
+  overrides?: SiteOverridesMap
+  siteIntegrationEnablement?: SiteIntegrationEnablementMap
   onChange: (updates: Partial<ExtensionSettings>) => void
 }
 
-export function NetworkTab({ settings, onChange }: NetworkTabProps) {
+export function NetworkTab({
+  settings,
+  overrides = {},
+  siteIntegrationEnablement = {},
+  onChange,
+}: NetworkTabProps) {
   const updateGlobalPolicy = (
     scope: "image" | "chapter",
     policy: Partial<RateScopePolicy>
@@ -42,6 +55,25 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
   const imagePolicy = settings.globalPolicy.image
   const chapterPolicy = settings.globalPolicy.chapter
   const retries = settings.globalRetries
+  const retryWarnings = (scope: "image" | "chapter") =>
+    getDefinitions().flatMap((provider) => {
+      const limit = provider.retryWarningThresholds?.[scope]
+      return limit !== undefined &&
+        retries[scope] > limit &&
+        overrides[provider.id]?.retries?.[scope] === undefined &&
+        provider.shipped &&
+        isEnabled(provider.id, siteIntegrationEnablement)
+        ? [
+            <RetryLimitWarning
+              key={provider.id}
+              provider={provider.name}
+              limit={limit}
+            />,
+          ]
+        : []
+    })
+  const imageRetryWarnings = retryWarnings("image")
+  const chapterRetryWarnings = retryWarnings("chapter")
 
   return (
     <div className="flex flex-col gap-6">
@@ -223,13 +255,22 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
       <SettingsGroup title={t("options_retrySettings")}>
         <SettingsRow
           title={t("options_imageRetries")}
-
+          description={
+            imageRetryWarnings.length > 0 && (
+              <div id="image-retries-warning">{imageRetryWarnings}</div>
+            )
+          }
           htmlFor="image-retries"
           control={
             <NumberStepper
               id="image-retries"
               testId="image-retries-input"
               label={t("options_imageRetries")}
+              describedBy={
+                imageRetryWarnings.length > 0
+                  ? "image-retries-warning"
+                  : undefined
+              }
               min={0}
               max={10}
               value={retries.image}
@@ -240,13 +281,22 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
 
         <SettingsRow
           title={t("options_chapterRetries")}
-
+          description={
+            chapterRetryWarnings.length > 0 && (
+              <div id="chapter-retries-warning">{chapterRetryWarnings}</div>
+            )
+          }
           htmlFor="chapter-retries"
           control={
             <NumberStepper
               id="chapter-retries"
               testId="chapter-retries-input"
               label={t("options_chapterRetries")}
+              describedBy={
+                chapterRetryWarnings.length > 0
+                  ? "chapter-retries-warning"
+                  : undefined
+              }
               min={0}
               max={10}
               value={retries.chapter}

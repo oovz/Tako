@@ -145,6 +145,16 @@
       "enum": ["platform", "provider"],
       "description": "Determines whether retry classification and backoff are managed by the platform or owned by the provider adapter."
     },
+    "retryWarningThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Advisory retry counts for Options. These values do not cap user settings.",
+      "properties": {
+        "image": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "chapter": { "type": "integer", "minimum": 0, "maximum": 10 }
+      }
+    },
     "pageProbe": {
       "enum": ["none", "optional", "required"],
       "description": "Whether this integration requires an active tab content-script probe to resolve reader/chapter state."

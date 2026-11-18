@@ -801,6 +801,10 @@ export const siteIntegrationCatalog = [
       }
     },
     "retryOwner": "provider",
+    "retryWarningThresholds": {
+      "image": 3,
+      "chapter": 3
+    },
     "pageProbe": "optional",
     "runtimes": {
       "background": true,

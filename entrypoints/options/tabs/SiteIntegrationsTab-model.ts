@@ -1,7 +1,7 @@
 import {
+  getDefinitions,
   isEnabled,
   requiresBroadHttpsPermission,
-  siteIntegrationCatalog,
 } from "@/src/site-integrations/catalog"
 import type {
   SiteIntegrationEnablementMap,
@@ -50,7 +50,7 @@ export function getSiteIntegrationList({
   overriddenIds: ReadonlySet<string>
 }) {
   // Catalog metadata is available before asynchronous provider initialization.
-  const integrations = siteIntegrationCatalog
+  const integrations = getDefinitions()
     .filter((manifest) => manifest.shipped)
     .map((manifest) => ({
       id: manifest.id,
@@ -59,6 +59,7 @@ export function getSiteIntegrationList({
       domains: manifest.patterns.domains,
       customSettings: manifest.customSettings,
       policyDefaults: manifest.policyDefaults,
+      retryWarningThresholds: manifest.retryWarningThresholds,
       requiresBroadHttpsPermission: requiresBroadHttpsPermission(manifest.id),
       enabled: isEnabled(manifest.id, enablement),
       overridden: overriddenIds.has(manifest.id),

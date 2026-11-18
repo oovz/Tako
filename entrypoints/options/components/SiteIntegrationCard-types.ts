@@ -3,7 +3,10 @@ import type {
   SiteOverrideRecord,
 } from "@/src/domain/site-integrations/storage-schemas"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
-import type { SiteIntegrationSettingsField as SettingsFieldSchema } from "@/src/site-integrations/definition-types"
+import type {
+  SiteIntegrationDefinition,
+  SiteIntegrationSettingsField as SettingsFieldSchema,
+} from "@/src/site-integrations/definition-types"
 type CustomSettingValue = SiteIntegrationSettingValue
 
 export interface SiteIntegrationInfo {
@@ -13,6 +16,7 @@ export interface SiteIntegrationInfo {
   domains: string[]
   customSettings?: SettingsFieldSchema[]
   requiresBroadHttpsPermission?: boolean
+  retryWarningThresholds?: SiteIntegrationDefinition["retryWarningThresholds"]
   policyDefaults?: {
     image?: Partial<RateScopePolicy>
     chapter?: Partial<RateScopePolicy>

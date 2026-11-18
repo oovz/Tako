@@ -12,7 +12,8 @@ export type SiteIntegrationPageProbe = "none" | "optional" | "required"
 /**
  * Determines whether retry classification and backoff are managed by the
  * platform or owned by the provider adapter. Providers needing custom control
- * set `retryOwner: "provider"` and implement it in-adapter.
+ * set `retryOwner: "provider"` and handle retry counts and per-attempt
+ * deadlines in the adapter.
  */
 export type SiteIntegrationRetryOwner = "platform" | "provider"
 
@@ -173,6 +174,8 @@ export interface SiteIntegrationDefinition {
   }
   /** Whether retry handling is delegated to the platform or owned by the provider. */
   retryOwner: SiteIntegrationRetryOwner
+  /** Advisory retry counts shown in Options. Users may choose higher values. */
+  retryWarningThresholds?: { image?: number; chapter?: number }
   /** Whether in-page DOM probing is required, optional, or not used. */
   pageProbe: SiteIntegrationPageProbe
   /** Surface flags declaring which runtime contexts are implemented. */

@@ -18,6 +18,8 @@ Declare the site's supported URLs and access requirements in `definition.json`. 
 
 Use `integrationHttpClient` for requests and `fetchImageWithStallDetection` for images. Forward cancellation, rate settings, byte progress, and resource accounting. Schedule each request once.
 
+Preserve the HTTP status on request errors so Tako can retry temporary failures. Set `retryWarningThresholds` in the provider definition to show advisory counts for images or chapters in Options. Provider-owned retry logic uses the task's retry counts and bounds each attempt.
+
 Validate response sizes, image dimensions, page counts, and provider-issued URLs before allocation or privileged use. Transformations must reserve their required resources and release them on success, failure, or cancellation.
 
 Request only the site access you need. Package executable code with the extension; do not execute code from site responses or log credentials.

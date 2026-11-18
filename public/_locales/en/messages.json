@@ -628,6 +628,13 @@
   "options_retrySettingsDesc": {
     "message": "Configure automatic retry behavior for failed downloads."
   },
+  "options_retryProviderWarning": {
+    "message": "This exceeds the recommended limit of $LIMIT$ retries for $PROVIDER$.",
+    "placeholders": {
+      "provider": { "content": "$1" },
+      "limit": { "content": "$2" }
+    }
+  },
   "options_imageRetries": {
     "message": "Image Retries"
   },

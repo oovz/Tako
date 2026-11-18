@@ -628,6 +628,13 @@
   "options_retrySettingsDesc": {
     "message": "失敗したダウンロードの自動再試行動作を設定。"
   },
+  "options_retryProviderWarning": {
+    "message": "$PROVIDER$ の推奨再試行回数（$LIMIT$ 回）を超えています。",
+    "placeholders": {
+      "provider": { "content": "$1" },
+      "limit": { "content": "$2" }
+    }
+  },
   "options_imageRetries": {
     "message": "画像再試行回数"
   },

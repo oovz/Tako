@@ -5,6 +5,7 @@ import { t } from "@/src/runtime/i18n"
 export function NumberStepper({
   id,
   label,
+  describedBy,
   testId,
   value,
   min,
@@ -13,6 +14,7 @@ export function NumberStepper({
 }: {
   id: string
   label: string
+  describedBy?: string
   testId: string
   value: number
   min: number
@@ -38,6 +40,7 @@ export function NumberStepper({
         step={1}
         value={value}
         aria-label={label}
+        aria-describedby={describedBy}
         onChange={(event) => {
           const next = Number(event.target.value)
           if (Number.isFinite(next))

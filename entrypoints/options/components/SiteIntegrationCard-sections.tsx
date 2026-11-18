@@ -17,6 +17,7 @@ import type { SiteOverrideRecord } from "@/src/domain/site-integrations/storage-
 import { RateLimitingForm } from "./RateLimitingForm"
 import { CustomSettingField } from "./CustomSettingField"
 import { SettingSourceLabel } from "./SettingSourceLabel"
+import { RetryLimitWarning } from "./RetryLimitWarning"
 import type { SiteIntegrationCardProps } from "./SiteIntegrationCard-types"
 
 type OverrideSectionProps = Pick<
@@ -155,18 +156,22 @@ export function SiteIntegrationRateSettings({
 
 function RetryField({
   scope,
-  integrationId,
+  siteIntegration,
   value,
   globalValue,
   updateOverride,
 }: {
   scope: "image" | "chapter"
-  integrationId: string
+  siteIntegration: OverrideSectionProps["siteIntegration"]
   value: SiteOverrideRecord["retries"]
   globalValue: SiteOverrideRecord["retries"]
   updateOverride: OverrideSectionProps["updateOverride"]
 }) {
-  const id = `${integrationId}-${scope}-retries`
+  const id = `${siteIntegration.id}-${scope}-retries`
+  const limit = siteIntegration.retryWarningThresholds?.[scope]
+  const effective = value?.[scope] ?? globalValue?.[scope]
+  const warning =
+    limit !== undefined && effective !== undefined && effective > limit
   return (
     <div className="flex flex-col gap-2">
       <SettingSourceLabel
@@ -178,7 +183,9 @@ function RetryField({
       />
       <Input
         id={id}
-        aria-describedby={`${id}-source`}
+        aria-describedby={
+          warning ? `${id}-source ${id}-warning` : `${id}-source`
+        }
         type="number"
         min={0}
         max={10}
@@ -195,6 +202,13 @@ function RetryField({
         }
         placeholder={globalValue ? String(globalValue[scope]) : undefined}
       />
+      {warning && (
+        <RetryLimitWarning
+          id={`${id}-warning`}
+          provider={siteIntegration.name}
+          limit={limit}
+        />
+      )}
     </div>
   )
 }
@@ -211,14 +225,14 @@ export function SiteIntegrationRetrySettings({
       <div className="grid grid-cols-2 gap-4">
         <RetryField
           scope="image"
-          integrationId={siteIntegration.id}
+          siteIntegration={siteIntegration}
           value={override?.retries}
           globalValue={globalDefaults.retries}
           updateOverride={updateOverride}
         />
         <RetryField
           scope="chapter"
-          integrationId={siteIntegration.id}
+          siteIntegration={siteIntegration}
           value={override?.retries}
           globalValue={globalDefaults.retries}
           updateOverride={updateOverride}

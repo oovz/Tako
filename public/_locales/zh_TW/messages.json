@@ -628,6 +628,13 @@
   "options_retrySettingsDesc": {
     "message": "設定失敗下載的自動重試行為。"
   },
+  "options_retryProviderWarning": {
+    "message": "這項設定超過了適用於 $PROVIDER$ 的建議上限（$LIMIT$ 次重試）。",
+    "placeholders": {
+      "provider": { "content": "$1" },
+      "limit": { "content": "$2" }
+    }
+  },
   "options_imageRetries": {
     "message": "圖片重試次數"
   },
