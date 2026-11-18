@@ -76,4 +76,14 @@ export class OptionsFsaController {
     void refreshFolderActionItem()
     return { status: "granted", handle }
   }
+
+  async requestSetupAccess(
+    handle: DirHandle | null
+  ): Promise<FolderAccessResult> {
+    if (!handle) return { status: "missing" }
+    if (!(await verifyPermission(handle, true, { requestImmediately: true })))
+      return { status: "denied" }
+    void refreshFolderActionItem()
+    return { status: "granted", handle }
+  }
 }

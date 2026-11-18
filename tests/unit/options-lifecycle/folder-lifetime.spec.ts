@@ -117,12 +117,17 @@ it("waits for Chrome approval before verifying persistent access to the saved fo
   const permission = Promise.withResolvers<boolean>()
   boundary.verify.mockReturnValueOnce(permission.promise)
   await act(async () => root.render(createElement(Harness)))
+  boundary.load.mockClear()
+  boundary.load.mockImplementationOnce(() => new Promise(() => {}))
 
   let finishing!: Promise<void>
-  await act(async () => {
+  act(() => {
     finishing = folder.folderSetup!.finish()
+    expect(boundary.verify).toHaveBeenCalledExactlyOnceWith(handle, true, {
+      requestImmediately: true,
+    })
   })
-  expect(boundary.verify).toHaveBeenCalledExactlyOnceWith(handle, true)
+  expect(boundary.load).not.toHaveBeenCalled()
   expect(boundary.send).not.toHaveBeenCalled()
 
   await act(async () => {

@@ -5,6 +5,25 @@ import {
 } from "@/src/storage/fs-access"
 
 describe("stored directory permission boundaries", () => {
+  it("requests write access immediately during folder setup", async () => {
+    const queryPermission = vi.fn(async () => "prompt")
+    const requestPermission = vi.fn(async () => "granted")
+    const next = vi.fn(async () => ({ done: true }))
+    const handle = {
+      queryPermission,
+      requestPermission,
+      entries: () => ({ next }),
+    } as unknown as FileSystemDirectoryHandle
+
+    const grant = verifyPermission(handle, true, { requestImmediately: true })
+    expect(requestPermission).toHaveBeenCalledExactlyOnceWith({
+      mode: "readwrite",
+    })
+    expect(queryPermission).not.toHaveBeenCalled()
+    await expect(grant).resolves.toBe(true)
+    expect(next).toHaveBeenCalledOnce()
+  })
+
   it("requests read permission and probes the values iterator when entries is unavailable", async () => {
     const next = vi.fn(async () => ({ done: true }))
     const queryPermission = vi.fn(async () => "denied")

@@ -112,6 +112,20 @@ async function verifyInSameTab(
   } catch (error) {
     logger.warn("Could not verify the saved folder's persistent access", error)
   } finally {
+    const details = {
+      afterApproval: payload.afterApproval === true,
+      outcome: outcome ?? "prompt",
+    }
+    if (
+      outcome === "temporary" ||
+      outcome === "unavailable" ||
+      outcome === "other_tabs"
+    )
+      logger.warn(
+        "Folder setup verification did not confirm persistent access",
+        details
+      )
+    else logger.info("Folder setup verification completed", details)
     await returnToStorage(tabId, payload.handleId, outcome)
   }
   return { success: true }
@@ -122,15 +136,22 @@ export function verifyFolderSetup(
   payload: RuntimeMessageRequest<"VERIFY_FOLDER_SETUP">["payload"],
   sender: chrome.runtime.MessageSender
 ): Promise<SetupResult> {
+  const blocked = (reason: UnavailableReason): SetupResult => {
+    logger.warn("Folder setup verification was blocked", {
+      afterApproval: payload.afterApproval === true,
+      reason,
+    })
+    return { success: false, reason }
+  }
   return runDestinationAccessExclusive(async () => {
     const tabId = sender.tab?.id
-    if (tabId === undefined) return { success: false, reason: "unavailable" }
+    if (tabId === undefined) return blocked("unavailable")
     const { downloads } = await deps.settingsRepository.getSettings()
     if (
       downloads.destination !== "file-system-access" ||
       downloads.customDirectoryHandleId !== payload.handleId
     ) {
-      return { success: false, reason: "unavailable" }
+      return blocked("unavailable")
     }
     if (!(await readFolderSetupRequired(payload.handleId)))
       return { success: true }
@@ -144,13 +165,12 @@ export function verifyFolderSetup(
           getEffectiveTaskDestination(task).kind === "file-system-access"
       )
     ) {
-      return { success: false, reason: "downloads_active" }
+      return blocked("downloads_active")
     }
-    if (await hasOtherTakoTab(tabId))
-      return { success: false, reason: "other_tabs" }
+    if (await hasOtherTakoTab(tabId)) return blocked("other_tabs")
     const tab = await chrome.tabs.get(tabId)
     if (!optionsPage(tab.url) || tab.pendingUrl !== undefined)
-      return { success: false, reason: "unavailable" }
+      return blocked("unavailable")
     return verifyInSameTab(tabId, payload)
   })
 }

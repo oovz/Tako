@@ -62,7 +62,7 @@ export function useOptionsFolderManagement(
     [begin, end, fsaController, settingsBuffer, onSettingsChange]
   )
   const grantSavedFolder = useCallback(
-    (deferSuccessFeedback = false) =>
+    (completingSetup = false) =>
       grantOptionsFolderAccess({
         begin,
         end,
@@ -70,7 +70,7 @@ export function useOptionsFolderManagement(
         handleId: savedHandleId,
         owner: savedFolderOwner.current,
         isCurrent: (owner) => savedFolderOwner.current === owner,
-        deferSuccessFeedback,
+        completingSetup,
         onGranted: (handle) => {
           setSavedFolderHandle(handle)
           setFolderAccessRequired(false)

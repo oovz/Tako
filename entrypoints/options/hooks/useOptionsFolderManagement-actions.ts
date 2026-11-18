@@ -67,13 +67,13 @@ interface GrantOptions extends FolderActionLifetime {
   handleId: string | null
   isCurrent: (owner: SavedFolderOwner) => boolean
   onGranted: (handle: DirHandle) => void
-  deferSuccessFeedback?: boolean
+  completingSetup: boolean
 }
 
 function applyFolderAccess(
   result: FolderAccessResult,
   owner: SavedFolderOwner,
-  options: Pick<GrantOptions, "onGranted" | "deferSuccessFeedback">
+  options: Pick<GrantOptions, "onGranted" | "completingSetup">
 ): boolean {
   if (result.status === "missing") {
     toast.error(t("settings_customFolderRequired"))
@@ -85,7 +85,7 @@ function applyFolderAccess(
   }
   owner.accessRevision++
   options.onGranted(result.handle)
-  if (!options.deferSuccessFeedback) toast.success(t("folderAccess_granted"))
+  if (!options.completingSetup) toast.success(t("folderAccess_granted"))
   return true
 }
 
@@ -106,7 +106,11 @@ export async function grantOptionsFolderAccess(
   const owner = options.owner
   if (!options.begin()) return false
   try {
-    const result = await options.controller.grantSavedAccess(options.handleId)
+    // Setup already loaded this handle. Start the prompt on the click's
+    // activation, before any IndexedDB or permission-query round trips.
+    const result = options.completingSetup
+      ? await options.controller.requestSetupAccess(owner.handle)
+      : await options.controller.grantSavedAccess(options.handleId)
     if (!options.isCurrent(owner)) return false
     return applyFolderAccess(result, owner, options)
   } catch (error) {

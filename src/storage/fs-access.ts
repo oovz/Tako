@@ -281,8 +281,12 @@ export async function loadDownloadRootHandle(
 
 export async function verifyPermission(
   dir: DirHandle,
-  writable = true
+  writable = true,
+  { requestImmediately = false } = {}
 ): Promise<boolean> {
+  const userActivation = requestImmediately
+    ? globalThis.navigator?.userActivation?.isActive
+    : undefined
   try {
     // Type assertion for optional File System Access API methods
     type DirHandleWithPermissions = DirHandle & {
@@ -295,15 +299,21 @@ export async function verifyPermission(
     }
 
     const dirWithPerms = dir as DirHandleWithPermissions
-    let perm = await dirWithPerms.queryPermission?.({
-      mode: writable ? "readwrite" : "read",
-    })
+    const descriptor = { mode: writable ? "readwrite" : "read" } as const
+    let perm = requestImmediately
+      ? undefined
+      : await dirWithPerms.queryPermission?.(descriptor)
     if (perm !== "granted") {
-      perm = await dirWithPerms.requestPermission?.({
-        mode: writable ? "readwrite" : "read",
-      })
+      perm = await dirWithPerms.requestPermission?.(descriptor)
     }
-    if (perm !== "granted") return false
+    if (perm !== "granted") {
+      if (requestImmediately)
+        logger.warn("Saved folder access request was not granted", {
+          permission: perm ?? "unsupported",
+          userActivation,
+        })
+      return false
+    }
 
     await probeDirectory(dir)
 
@@ -312,7 +322,12 @@ export async function verifyPermission(
     // Permission API unavailable or threw (e.g. iframe sandbox, user gesture
     // required, or deleted folder). Treat as "no permission" but log so FSA failures are
     // debuggable instead of silently degrading to Downloads API.
-    logger.debug("[fs-access] verifyPermission failed:", error)
+    if (requestImmediately)
+      logger.warn("Saved folder access request failed", {
+        userActivation,
+        error,
+      })
+    else logger.debug("[fs-access] verifyPermission failed:", error)
     return false
   }
 }

@@ -10,6 +10,7 @@ import type { OptionsFsaController } from "../controllers/options-fsa-controller
 export interface SavedFolderOwner {
   controller: OptionsFsaController
   handleId: string | null
+  handle: DirHandle | null
   accessRevision: number
 }
 
@@ -50,7 +51,12 @@ export function useOptionsSavedFolder(
   const [setupHandleId, setSetupHandleId] = useState<string | null>(null)
   const savedFolderOwner = useRef<SavedFolderOwner | null>(null)
   useLayoutEffect(() => {
-    savedFolderOwner.current = { controller, handleId, accessRevision: 0 }
+    savedFolderOwner.current = {
+      controller,
+      handleId,
+      handle: null,
+      accessRevision: 0,
+    }
     return () => {
       savedFolderOwner.current = null
     }
@@ -58,16 +64,18 @@ export function useOptionsSavedFolder(
   useEffect(() => {
     let canceled = false
     const owner = savedFolderOwner.current
-    const revision = owner?.accessRevision
+    if (!owner) return
+    const revision = owner.accessRevision
     const isCurrent = () =>
       !canceled &&
       savedFolderOwner.current === owner &&
-      owner?.accessRevision === revision
+      owner.accessRevision === revision
     void readSavedFolder(
       controller,
       handleId,
       isCurrent,
       (handle, needsAccess, needsSetup) => {
+        owner.handle = handle
         setSavedFolderHandle(handle)
         setFolderAccessRequired(needsAccess)
         setSetupHandleId(needsSetup ? handleId : null)
