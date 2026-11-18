@@ -410,15 +410,33 @@ describe("complete chapter output", () => {
     const error = new Error("archive worker stopped during image retry")
     const started: string[] = []
     const activePage = Promise.withResolvers<void>()
+    const secondPageStarted = Promise.withResolvers<void>()
+    const retryScheduled = vi.fn()
     f.runtime.withImageRetries = (fn, hooks, signal) =>
-      withRetries(fn, 10, 60_000, hooks, signal)
+      withRetries(
+        fn,
+        10,
+        60_000,
+        {
+          ...hooks,
+          onRetry: (retry) => {
+            hooks?.onRetry?.(retry)
+            retryScheduled()
+          },
+        },
+        signal
+      )
     const imageFn: ChapterDownloadImageFn = async (url, options) => {
       started.push(url)
-      if (url === URLS[0]) throw new Error("temporary image failure")
+      if (url === URLS[0]) {
+        await secondPageStarted.promise
+        throw new Error("temporary image failure")
+      }
       const lease = f.ledger.reserve(PAGE.byteLength, "active page")
       const signal = options!.signal!
       const onAbort = () => activePage.resolve()
       signal.addEventListener("abort", onAbort, { once: true })
+      secondPageStarted.resolve()
       try {
         await activePage.promise
       } finally {
@@ -435,7 +453,7 @@ describe("complete chapter output", () => {
     const settled = vi.fn()
     void result.then(settled)
     try {
-      await vi.waitFor(() => expect(started).toEqual(URLS.slice(0, 2)))
+      await vi.waitFor(() => expect(retryScheduled).toHaveBeenCalledOnce())
       workers[0].fail(error)
       await vi.waitFor(() => expect(settled).toHaveBeenCalledWith(error))
       expect(started).toEqual(URLS.slice(0, 2))
@@ -443,7 +461,9 @@ describe("complete chapter output", () => {
       expect(f.ledger.getUsedBytes()).toBe(0)
       expect(await f.outputBytes()).toEqual([])
     } finally {
+      secondPageStarted.resolve()
       activePage.resolve()
+      if (!settled.mock.calls.length) workers[0]?.fail(error)
       await vi.advanceTimersByTimeAsync(60_000)
       await result
       vi.useRealTimers()
@@ -484,57 +504,66 @@ describe("complete chapter output", () => {
     }
   )
 
-  it("cancels running and queued archive pages after a required page fails", async () => {
-    const f = fixture("cbz", "browser", 0, 2)
-    const started = Promise.withResolvers<AbortSignal>()
-    const release = Promise.withResolvers<void>()
-    const imageFn: ChapterDownloadImageFn = vi.fn(async (url, options) => {
-      if (url === URLS[0]) {
-        await started.promise
-        throw new Error("HTTP 404")
-      }
-      if (url === URLS[1]) {
-        const signal = options.signal!
-        signal.addEventListener("abort", () => release.resolve(), {
-          once: true,
-        })
-        started.resolve(signal)
-        await release.promise
-        signal.throwIfAborted()
-      }
-      return {
-        filename: "page.png",
-        mimeType: "image/png",
-        data: PAGE.slice().buffer,
-        liveResourceLease: f.ledger.reserve(PAGE.byteLength, "page buffer"),
-      }
-    })
-    const outcome = f.process(imageFn)
-    const activeSignal = await started.promise
-    try {
-      await vi.waitFor(() => expect(activeSignal.aborted).toBe(true), {
-        timeout: 300,
+  it.each(["browser", "custom"] as const)(
+    "cancels active and queued archive pages in %s mode after a required page fails",
+    async (mode) => {
+      const f = fixture("cbz", mode, 0, 2)
+      const started = Promise.withResolvers<AbortSignal>()
+      const release = Promise.withResolvers<void>()
+      const imageFn: ChapterDownloadImageFn = vi.fn(async (url, options) => {
+        if (url === URLS[0]) {
+          await started.promise
+          throw new Error("HTTP 404")
+        }
+        if (url === URLS[1]) {
+          const signal = options.signal!
+          signal.addEventListener("abort", () => release.resolve(), {
+            once: true,
+          })
+          started.resolve(signal)
+          await release.promise
+          signal.throwIfAborted()
+        }
+        return {
+          filename: "page.png",
+          mimeType: "image/png",
+          data: PAGE.slice().buffer,
+          liveResourceLease: f.ledger.reserve(PAGE.byteLength, "page buffer"),
+        }
       })
-    } finally {
-      release.resolve()
-      await outcome
+      const outcome = f.process(imageFn)
+      const activeSignal = await started.promise
+      try {
+        await vi.waitFor(() => expect(activeSignal.aborted).toBe(true), {
+          timeout: 300,
+        })
+      } finally {
+        release.resolve()
+        await outcome
+      }
+      expect(imageFn).toHaveBeenCalledTimes(2)
+      expect(await outcome).toMatchObject({
+        status: "failed",
+        imagesFailed: 1,
+        errorMessage: expect.stringContaining("HTTP 404"),
+        outputsCommitted: 0,
+      })
+      expect(await f.outputBytes()).toEqual([])
+      expect(f.ledger.getUsedBytes()).toBe(0)
     }
-    expect(imageFn).toHaveBeenCalledTimes(2)
-    expect(await outcome).toMatchObject({
-      status: "failed",
-      imagesFailed: 1,
-      errorMessage: expect.stringContaining("HTTP 404"),
-      outputsCommitted: 0,
-    })
-    expect(await f.outputBytes()).toEqual([])
-    expect(f.ledger.getUsedBytes()).toBe(0)
-  })
+  )
 
-  it.each([false, true])(
-    "holds new archive requests during a page retry and resumes only if it recovers (%s)",
-    async (recovers) => {
+  it.each([
+    { mode: "browser", recovers: false },
+    { mode: "browser", recovers: true },
+    { mode: "custom", recovers: false },
+    { mode: "custom", recovers: true },
+  ] as const)(
+    "holds $mode archive requests awaiting rate limiting until a page retry settles (recovers: $recovers)",
+    async ({ mode, recovers }) => {
       vi.useFakeTimers()
-      const f = fixture("cbz", "browser", 1, 2)
+      const f = fixture("cbz", mode, 1, 2)
+      f.opts.settingsSnapshot.rateLimitSettings.image.delayMs = 200
       f.runtime.withImageRetries = (fn, hooks, signal) =>
         withRetries(fn, 1, 1000, hooks, signal, { retryNotFound: true })
       let pageAttempts = 0
@@ -549,8 +578,8 @@ describe("complete chapter output", () => {
       const warn = vi.spyOn(logger, "warn")
       const result = f.process()
       try {
-        await vi.advanceTimersByTimeAsync(100)
-        expect(fetch.mock.calls.map(([url]) => url)).toEqual(URLS.slice(0, 2))
+        await vi.advanceTimersByTimeAsync(600)
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([URLS[0]])
         expect(warn).toHaveBeenCalledWith(
           "Chapter image retry scheduled",
           expect.objectContaining({
@@ -563,16 +592,16 @@ describe("complete chapter output", () => {
             error: expect.objectContaining({ status: 404 }),
           })
         )
-        await vi.advanceTimersByTimeAsync(1000)
+        await vi.advanceTimersByTimeAsync(2000)
         expect(await result).toMatchObject({
           status: recovers ? "completed" : "failed",
         })
         expect(fetch.mock.calls.map(([url]) => url)).toEqual([
-          ...URLS.slice(0, 2),
           URLS[0],
-          ...(recovers ? URLS.slice(2) : []),
+          URLS[0],
+          ...(recovers ? URLS.slice(1) : []),
         ])
-        expect(f.handoffs).toHaveLength(recovers ? 1 : 0)
+        expect(await f.outputBytes()).toHaveLength(recovers ? 1 : 0)
         expect(f.ledger.getUsedBytes()).toBe(0)
       } finally {
         await vi.advanceTimersByTimeAsync(2000)

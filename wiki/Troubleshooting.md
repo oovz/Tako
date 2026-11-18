@@ -44,7 +44,7 @@ If its original destination is unavailable, choose a folder in **Options → Sto
 
 Set **Image Retries** and **Chapter Retries** under **Options → Network & Speed**. For a single site, set an override under **Site Integrations**. You can save a value above a site's recommended limit. Changes apply to newly queued tasks.
 
-Tako retries temporary chapter loading errors and missing image responses such as HTTP 404. If a required image still fails, CBZ and ZIP stop that chapter. **Loose Images** can save the other pages.
+Tako retries temporary chapter loading errors and missing image responses such as HTTP 404. For CBZ and ZIP, Tako holds queued pages while a required page retries. Pages already being processed can still start or finish downloading during the wait. If the required page runs out of retries, Tako cancels the remaining requests and discards the archive. This applies to both Chrome Downloads and custom folders. With **No Archive**, Tako can save the pages that succeed.
 
 - **Retry failed chapters**, when available, keeps completed chapters and tries failed, partially saved, and eligible skipped chapters again. A partially saved chapter starts from the beginning.
 - **Restart task** tries every chapter again.

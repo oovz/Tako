@@ -73,6 +73,7 @@ type DownloadChapterImagesResult = {
 }
 
 type ImageByteState = { receivedBytes: number; reservedBytes: number }
+const deferredImageRequest = Symbol()
 
 class ChapterImageByteBudget {
   private reservedBytes = 0
@@ -140,6 +141,7 @@ class ChapterImageBatch {
   private readonly budget: ChapterImageByteBudget
   private readonly controller = new AbortController()
   private readonly retryingImages = new Set<number>()
+  private waitingForRetries: PromiseWithResolvers<void> | undefined
   private processed = 0
   private succeeded = 0
   private failed = 0
@@ -161,7 +163,7 @@ class ChapterImageBatch {
 
   async run(): Promise<DownloadChapterImagesResult> {
     const { abortSignal, urls } = this.input
-    const onAbort = () => this.cancelPending(abortSignal?.reason)
+    const onAbort = () => this.cancelBatch(abortSignal?.reason)
     abortSignal?.addEventListener("abort", onAbort, { once: true })
     if (abortSignal?.aborted) onAbort()
     try {
@@ -202,9 +204,21 @@ class ChapterImageBatch {
     }
   }
 
-  private cancelPending(reason: unknown = new Error("job-cancelled")): void {
+  private cancelBatch(reason: unknown = new Error("job-cancelled")): void {
     if (!this.controller.signal.aborted) this.controller.abort(reason)
     this.queue.cancelPending(reason)
+    this.releaseWaitingRequests()
+  }
+
+  private holdNewRequests(page: number): void {
+    if (!this.input.stopOnFailure || this.controller.signal.aborted) return
+    this.retryingImages.add(page)
+    this.waitingForRetries ??= Promise.withResolvers<void>()
+  }
+
+  private releaseWaitingRequests(): void {
+    this.waitingForRetries?.resolve()
+    this.waitingForRetries = undefined
   }
 
   private assertActive(): void {
@@ -262,17 +276,12 @@ class ChapterImageBatch {
   private downloadWithRetries(
     url: string,
     state: ImageByteState,
+    page: number,
     hooks: RetryHooks,
     onImageRetry: () => void
   ): Promise<ChapterDownloadImageResult> {
     return this.runtime.withImageRetries(
-      () =>
-        this.input.rateLimitService.scheduleForIntegrationScope(
-          this.input.integrationId,
-          "image",
-          () => this.fetchImage(url, state, onImageRetry),
-          this.input.rateLimitSettings.image
-        ),
+      () => this.scheduleImageRequest(url, state, page, onImageRetry),
       {
         onRetry: hooks.onRetry,
         onAttemptStart: async (attempt) => {
@@ -286,6 +295,40 @@ class ChapterImageBatch {
     )
   }
 
+  private async scheduleImageRequest(
+    url: string,
+    state: ImageByteState,
+    page: number,
+    onImageRetry: () => void
+  ): Promise<ChapterDownloadImageResult> {
+    while (true) {
+      this.assertActive()
+      const waiting = this.waitingForRetries
+      if (waiting && !this.retryingImages.has(page)) {
+        await waiting.promise
+        continue
+      }
+      const result =
+        await this.input.rateLimitService.scheduleForIntegrationScope<
+          ChapterDownloadImageResult | typeof deferredImageRequest
+        >(
+          this.input.integrationId,
+          "image",
+          async () => {
+            // A page can fail while another is waiting for the provider's
+            // pacing delay. Free this slot so the failed page can retry.
+            if (this.waitingForRetries && !this.retryingImages.has(page))
+              return deferredImageRequest
+            // A transport already waiting for memory can start during retry
+            // backoff. Cancelling the batch also aborts those waits.
+            return this.fetchImage(url, state, onImageRetry)
+          },
+          this.input.rateLimitSettings.image
+        )
+      if (result !== deferredImageRequest) return result
+    }
+  }
+
   private recordFailure(
     url: string,
     index: number,
@@ -294,9 +337,9 @@ class ChapterImageBatch {
   ): void {
     if (isResourceLimit(error)) {
       this.budget.failure ??= error.message
-      this.cancelPending(error)
+      this.cancelBatch(error)
     } else if (this.input.stopOnFailure || this.input.isFatalError?.(error)) {
-      this.cancelPending(error)
+      this.cancelBatch(error)
     }
     const failure = { url, index, error, attempts }
     this.failed++
@@ -312,23 +355,19 @@ class ChapterImageBatch {
     const bytes: ImageByteState = { receivedBytes: 0, reservedBytes: 0 }
     let result: ChapterDownloadImageResult | undefined
     let attempts = 0
-    const pauseForRetry = () => {
-      if (this.input.stopOnFailure) {
-        this.retryingImages.add(page)
-        this.queue.pause()
-      }
-    }
+    const holdForRetry = () => this.holdNewRequests(page)
     try {
       this.assertActive()
       result = await this.downloadWithRetries(
         url,
         bytes,
+        page,
         {
           onAttemptStart: (attempt) => {
             attempts = attempt
           },
           onRetry: (retry) => {
-            pauseForRetry()
+            holdForRetry()
             logger.warn("Chapter image retry scheduled", {
               taskId: this.input.taskId,
               chapterId: this.input.chapterId,
@@ -339,7 +378,7 @@ class ChapterImageBatch {
             })
           },
         },
-        pauseForRetry
+        holdForRetry
       )
       this.controller.signal.throwIfAborted()
       if (this.budget.failure)
@@ -360,12 +399,8 @@ class ChapterImageBatch {
       this.recordFailure(url, index, error, attempts)
     } finally {
       result?.liveResourceLease.release()
-      if (
-        this.retryingImages.delete(page) &&
-        this.retryingImages.size === 0 &&
-        !this.controller.signal.aborted
-      )
-        this.queue.resume()
+      if (this.retryingImages.delete(page) && this.retryingImages.size === 0)
+        this.releaseWaitingRequests()
     }
     this.processed++
     const pct = Math.max(

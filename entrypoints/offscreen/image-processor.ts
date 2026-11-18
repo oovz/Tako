@@ -16,7 +16,6 @@ export { fetchImageWithStallDetection }
 class PromiseQueue {
   private maxConcurrent: number
   private running: number
-  private paused = false
   private queue: Array<{
     task: () => Promise<unknown>
     resolve: (value: unknown) => void
@@ -49,30 +48,19 @@ class PromiseQueue {
     return pending.length
   }
 
-  pause(): void {
-    this.paused = true
-  }
-
-  resume(): void {
-    this.paused = false
-    this._runNext()
-  }
-
   private _runNext(): void {
-    while (
-      !this.paused &&
-      this.running < this.maxConcurrent &&
-      this.queue.length > 0
-    ) {
-      const { task, resolve, reject } = this.queue.shift()!
-      this.running++
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          this.running--
-          this._runNext()
-        })
+    if (this.running >= this.maxConcurrent || this.queue.length === 0) {
+      return
     }
+
+    const { task, resolve, reject } = this.queue.shift()!
+    this.running++
+    task()
+      .then(resolve, reject)
+      .finally(() => {
+        this.running--
+        this._runNext()
+      })
   }
 }
 
@@ -166,6 +154,7 @@ async function withRetries<T>(
     } catch (error) {
       if (!shouldRetryFailure(error, attempt, maxAttempts, retryNotFound))
         throw error
+      throwIfAborted(signal)
       const delay = baseDelayMs * Math.pow(3, attempt - 1)
       hooks?.onRetry?.({
         error,
