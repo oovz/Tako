@@ -87,4 +87,45 @@ jobs:
             test-results
             .output
           if-no-files-found: ignore
+  firefox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.checkout_ref }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Install Firefox stable and geckodriver
+        run: |
+          mkdir -p "$RUNNER_TEMP/tako-firefox"
+          cd "$RUNNER_TEMP/tako-firefox"
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US' \
+            --output firefox.tar.xz
+          tar -xJf firefox.tar.xz
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-v0.37.1-linux64.tar.gz' \
+            --output geckodriver.tar.gz
+          echo 'e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e  geckodriver.tar.gz' | sha256sum -c
+          tar -xzf geckodriver.tar.gz
+          echo "FIREFOX_BIN=$PWD/firefox/firefox" >> "$GITHUB_ENV"
+          echo "GECKODRIVER=$PWD/geckodriver" >> "$GITHUB_ENV"
+          "$PWD/firefox/firefox" --version
+          "$PWD/geckodriver" --version
+      - name: Packaged Firefox tests
+        run: pnpm test:firefox
+      - name: Upload Firefox test artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: firefox-artifacts
+          path: test-results/firefox
+          if-no-files-found: ignore
           retention-days: 7
