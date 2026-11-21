@@ -4,14 +4,41 @@ You can help Tako by fixing a download problem, adding support for a site, or im
 
 ## Quick setup
 
-Clone the repository and run these commands from its root. Use the Node.js version in [`.node-version`](.node-version) and the pnpm version in [`package.json`](package.json). You need Chrome 150 or later to load the build.
+Clone the repository and run these commands from its root. Use the Node.js version in [`.node-version`](.node-version) and the pnpm version in [`package.json`](package.json).
 
 ```sh
 pnpm install --frozen-lockfile
+```
+
+### Load Tako in Chrome
+
+Use Chrome 150 or later.
+
+```sh
 pnpm build
 ```
 
 In Chrome, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `.output/chrome-mv3`. Pin Tako and click its icon on a [supported page](https://github.com/oovz/Tako/wiki/Supported-Sites) to open the side panel.
+
+### Load Tako in Firefox for testing
+
+Use the stable release of desktop Firefox in a regular window with the default container.
+
+```sh
+pnpm zip:firefox
+```
+
+1. In Firefox, open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on** and select the `tako-manga-downloader-<version>-firefox.zip` file in `.output`.
+3. Open a [supported series](https://github.com/oovz/Tako/wiki/Supported-Sites), then click Tako in the Extensions menu to open the sidebar. Pin Tako to the toolbar for direct access.
+
+The temporary installation lasts until you remove Tako or restart Firefox. The planned public installation path is a signed [Firefox Add-ons listing](https://addons.mozilla.org/firefox/). See [temporary installation in Firefox](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
+
+### Find files saved by Firefox
+
+Tako saves CBZ archives by default. In **Tako Options → Storage & Files**, choose CBZ, ZIP, or individual images and preview your subfolder and filename templates. Firefox stores the results under the folder shown in **Save files to** in Firefox Settings. For example, the default subfolder template places a chapter archive in `TMD/<series title>` inside that folder. [Find or change your Firefox download folder](https://support.mozilla.org/en-US/kb/where-find-and-manage-downloaded-files-firefox).
+
+You can close the sidebar while a chapter downloads. A chapter appears as **Saved** only after Firefox confirms all its files. If Tako reports that a save could not be confirmed, check your downloads folder before retrying to avoid duplicates.
 
 ## Development workflow
 
@@ -38,18 +65,19 @@ To add a site, run `pnpm new:site-integration <id>` and follow the [Site Integra
 
 ## Testing
 
-| Suite       | Command                 | What it checks                                                                |
-| ----------- | ----------------------- | ----------------------------------------------------------------------------- |
-| Unit        | `pnpm test:unit`        | Individual functions and components                                           |
-| Integration | `pnpm test:integration` | Modules working together with controlled browser and network interfaces       |
-| E2E         | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                     |
-| Live E2E    | `pnpm test:live`        | The built extension against real sites; run for an intentional provider check |
+| Suite        | Command                 | What it checks                                                                |
+| ------------ | ----------------------- | ----------------------------------------------------------------------------- |
+| Unit         | `pnpm test:unit`        | Individual functions and components                                           |
+| Integration  | `pnpm test:integration` | Modules working together with controlled browser and network interfaces       |
+| Chromium E2E | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                     |
+| Firefox E2E  | `pnpm test:firefox`     | The packaged extension in desktop Firefox using local site fixtures           |
+| Live E2E     | `pnpm test:live`        | The built extension against real sites; run for an intentional provider check |
 
 Run `pnpm test:coverage` to measure unit and integration coverage with Vitest V8. The command checks the coverage thresholds, prints a summary, and writes `coverage/index.html`, `coverage/lcov.info`, and `coverage/coverage-final.json`.
 
 Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
-Browser tests run headlessly in bundled Chromium with disposable profiles. The host-access check loads the production build and uses OpenSSL to serve local HTTPS fixtures on the original provider hostnames. Install Chromium and ensure `openssl` is on your `PATH` before running the suite.
+Chromium tests run headlessly with disposable profiles. The host-access check loads the production build and uses OpenSSL to serve local HTTPS fixtures on the original provider hostnames. Install Chromium and ensure `openssl` is on your `PATH` before running the suite.
 
 ```sh
 pnpm exec playwright install --no-shell chromium
@@ -57,6 +85,8 @@ pnpm test:e2e
 ```
 
 Use `pnpm test:e2e:headed` to run the same tests with a visible browser.
+
+For Firefox tests, install stable desktop Firefox and put `geckodriver` and `openssl` on your `PATH`. Run `pnpm test:firefox` to build and test the package in a disposable Firefox profile. Set `FIREFOX_BIN` or `GECKODRIVER` to use a particular binary. [Download geckodriver](https://github.com/mozilla/geckodriver/releases).
 
 ### E2E diagnostics
 

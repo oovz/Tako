@@ -2,7 +2,7 @@
 
 Last updated: November 17, 2026
 
-Tako Manga Downloader is a browser extension for saving chapters from supported manga sites for offline reading. Download controls are available in Chrome's Side Panel.
+Tako Manga Downloader is a browser extension for saving chapters from supported manga sites for offline reading. Download controls are available in Chrome’s side panel and Firefox’s sidebar.
 
 ## What Tako accesses
 
@@ -11,8 +11,8 @@ While you use the extension, Tako may access:
 - Supported-site page URLs and page metadata needed to identify a series or chapter
 - Chapter metadata, cover URLs, and image URLs required to build a download
 - Browser download APIs and local extension storage used for queue state, settings, and history
-- File System Access handles only when the user explicitly chooses a custom download folder
-- Browser-managed credentials for provider and image requests, subject to Chrome's cookie rules
+- File System Access handles when you choose a custom download folder in Chrome
+- Browser-managed credentials for provider and image requests, subject to the browser’s cookie rules
 
 ## What Tako stores
 
@@ -28,11 +28,13 @@ The extension stores the following data locally:
 
 Tako sends network requests directly to supported sites and their image services to show series information and download chapters.
 
-Cover previews and chapter downloads connect to the site's image services. Requests may include browser-managed cookies when required by the site, subject to Chrome's cookie rules.
+Cover previews and chapter downloads connect to the site’s image services. Requests may include browser-managed cookies when required by the site, subject to the browser’s cookie rules.
 
 The extension does not collect browsing history, reading activity, or download contents for a developer-run analytics backend.
 
-When you enable the disabled-by-default MangaDex integration, downloads from MangaDex@Home nodes are reported directly to MangaDex as required by that API. A report may include the full image URL, success status, transferred byte count, transfer duration, and cache status.
+MangaDex requires Tako to report image download results from MangaDex@Home nodes directly to MangaDex. Each report includes the image URL, whether the download succeeded, the number of bytes transferred, how long it took, and whether the node served it from cache.
+
+MangaDex starts disabled. In Firefox, enabling it asks you to grant site access and allow download reporting. You can revoke reporting in **Add-ons Manager → Tako → Permissions and data**. Revoking it stops reporting and disables the MangaDex integration.
 
 ## What Tako does not do
 
@@ -51,7 +53,7 @@ You can:
 - Clear local task and chapter history.
 - View, clear, or export diagnostic entries from Options → Diagnostics. Reports download to your device when you choose **Export JSON**. Review them before sharing.
 - Disable supported-site integrations
-- Change the default save folder for new tasks in Options; existing tasks keep their original folder
+- Choose a save folder for new tasks in Tako Options on Chrome. Existing Chrome tasks keep their original folder. On Firefox, choose the folder in Firefox Settings.
 
 ## Contact
 
