@@ -2,6 +2,7 @@ import process from "node:process"
 import type { ConfigEnv, UserManifest, WxtViteConfig } from "wxt"
 import tailwindcss from "@tailwindcss/vite"
 import { siteIntegrationWxtPermissions } from "../src/runtime/generated/site-integration-wxt-permissions"
+import { MANGADEX_REPORTING_DATA_TYPE } from "../src/site-integrations/mangadex/report-permission"
 
 export function createViteBuildPolicy(configEnv: ConfigEnv): WxtViteConfig {
   return {
@@ -25,7 +26,11 @@ export function createViteBuildPolicy(configEnv: ConfigEnv): WxtViteConfig {
   }
 }
 
-export function createExtensionManifest({ mode }: ConfigEnv): UserManifest {
+export function createExtensionManifest({
+  browser,
+  mode,
+}: ConfigEnv): UserManifest {
+  const firefox = browser === "firefox"
   const isLiveTest = mode === "live-test"
   // Test capabilities require an isolated build mode.
   const isDeterministicE2e =
@@ -34,15 +39,30 @@ export function createExtensionManifest({ mode }: ConfigEnv): UserManifest {
 
   return {
     name: "__MSG_extName__",
-    description: "__MSG_extDescription__",
+    description: firefox
+      ? "__MSG_extDescriptionFirefox__"
+      : "__MSG_extDescription__",
     default_locale: "en",
-    minimum_chrome_version: "150",
+    ...(firefox
+      ? {
+          incognito: "not_allowed" as const,
+          browser_specific_settings: {
+            gecko: {
+              id: "tako-manga-downloader@oovz",
+              strict_min_version: "153.0",
+              data_collection_permissions: {
+                required: ["none" as const],
+                optional: [MANGADEX_REPORTING_DATA_TYPE],
+              },
+            },
+          },
+        }
+      : { minimum_chrome_version: "150" }),
     permissions: [
       "storage",
       "unlimitedStorage",
       "downloads",
-      "offscreen",
-      "sidePanel",
+      ...(firefox ? [] : ["offscreen", "sidePanel"]),
       "scripting",
       "tabs",
       "webNavigation",
@@ -53,9 +73,6 @@ export function createExtensionManifest({ mode }: ConfigEnv): UserManifest {
     ],
     background: {
       type: "module",
-    },
-    side_panel: {
-      default_path: "sidepanel.html",
     },
     host_permissions: grantsBroadHttpsForIsolatedTest
       ? [

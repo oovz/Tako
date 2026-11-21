@@ -61,9 +61,10 @@ export class NotificationService {
     )
     if (!taskId.success) return
 
-    const downloadId = complete
-      ? await this.readPersistedDownloadId(taskId.data, queueRepository)
-      : undefined
+    const downloadId =
+      complete && !import.meta.env.FIREFOX
+        ? await this.readPersistedDownloadId(taskId.data, queueRepository)
+        : undefined
     if (downloadId === undefined) {
       await openOptionsTab({ page: "activity", taskId: taskId.data })
     } else {
@@ -130,7 +131,7 @@ export class NotificationService {
       message: `${task.seriesTitle}: ${chapterCount}${saveGuidance}`,
       contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 1,
-      requireInteraction: false,
+      ...(!import.meta.env.FIREFOX && { requireInteraction: false }),
     })
   }
 
@@ -159,7 +160,7 @@ export class NotificationService {
       message: `${task.seriesTitle}: ${failedCount}/${task.chapters.length} chapters failed`,
       contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 2,
-      requireInteraction: false,
+      ...(!import.meta.env.FIREFOX && { requireInteraction: false }),
     })
 
     if (errorMessage) {

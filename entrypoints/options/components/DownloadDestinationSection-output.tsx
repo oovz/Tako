@@ -15,23 +15,24 @@ export function DownloadDestinationOutput({
   const isFsaActive = downloads.destination === "file-system-access"
   return (
     <>
-      {/* Suppress Save As Dialog Row (Browser Downloads only) */}
-      <SettingsRow
-        title={t("options_suppressSaveAs")}
-        description={t("options_suppressSaveAsDesc")}
-        htmlFor="suppress-save-as"
-        control={
-          <Switch
-            id="suppress-save-as"
-            data-testid="suppress-save-as-switch"
-            checked={downloads.suppressSaveAsDialog}
-            disabled={isSaving || isFsaActive}
-            onCheckedChange={(checked) =>
-              onDownloadsChange({ suppressSaveAsDialog: checked })
-            }
-          />
-        }
-      />
+      {!import.meta.env.FIREFOX && (
+        <SettingsRow
+          title={t("options_suppressSaveAs")}
+          description={t("options_suppressSaveAsDesc")}
+          htmlFor="suppress-save-as"
+          control={
+            <Switch
+              id="suppress-save-as"
+              data-testid="suppress-save-as-switch"
+              checked={downloads.suppressSaveAsDialog}
+              disabled={isSaving || isFsaActive}
+              onCheckedChange={(checked) =>
+                onDownloadsChange({ suppressSaveAsDialog: checked })
+              }
+            />
+          }
+        />
+      )}
 
       {/* Conflict Policy Row */}
       <SettingsRow

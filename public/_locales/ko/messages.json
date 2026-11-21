@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "브라우저에서 바로 만화를 다운로드하세요. Chrome 사이드 패널에서 챕터를 고르고, 다운로드하는 동안 웹을 계속 보세요."
   },
+  "extDescriptionFirefox": {
+    "message": "브라우저에서 바로 만화를 다운로드하세요. Firefox 사이드바에서 챕터를 고르고, 다운로드하는 동안 웹을 계속 보세요."
+  },
   "common_all": {
     "message": "전체"
   },
@@ -100,6 +103,9 @@
   },
   "sidepanel_checkDownloadsFailed": {
     "message": "Chrome 다운로드를 열 수 없습니다."
+  },
+  "sidepanel_openDownloadsFolderFailed": {
+    "message": "다운로드 폴더를 열 수 없습니다."
   },
   "sidepanel_taskStoppedEarly": {
     "message": "다운로드가 완료되기 전에 중지되었습니다."
@@ -280,6 +286,9 @@
   "sidepanel_cancelProgressWarning": {
     "message": "이 작업의 남은 처리를 중단합니다. Chrome이 이미 접수한 다운로드는 계속되며, Chrome 다운로드에서 관리할 수 있습니다."
   },
+  "sidepanel_firefoxCancelProgressWarning": {
+    "message": "이 작업의 남은 처리를 중단합니다. Firefox이 이미 접수한 다운로드는 계속되며, Firefox 다운로드에서 관리할 수 있습니다."
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 다운로드 중",
     "placeholders": {
@@ -437,6 +446,9 @@
   },
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome에서 파일 저장을 완료하지 못했습니다."
+  },
+  "downloadError_firefoxDownloadInterrupted": {
+    "message": "Firefox에서 파일 저장을 완료하지 못했습니다."
   },
   "downloadError_archiveCreationFailed": {
     "message": "압축 파일을 생성하지 못했습니다."
@@ -671,6 +683,9 @@
   "options_uiLanguageDesc": {
     "message": "Tako 사이드 패널과 설정에 적용됩니다. 확장 프로그램 이름은 Chrome의 언어 설정을 따릅니다."
   },
+  "options_firefoxUiLanguageDesc": {
+    "message": "Tako 사이드바과 설정에 적용됩니다. 확장 프로그램 이름은 Firefox의 언어 설정을 따릅니다."
+  },
   "options_languageAutomatic": {
     "message": "자동(브라우저 언어)"
   },
@@ -694,6 +709,9 @@
   },
   "options_downloadDestination": {
     "message": "새 작업의 다운로드 기본값"
+  },
+  "options_firefoxDownloadFolder": {
+    "message": "파일은 Firefox 설정에서 지정한 다운로드 폴더에 저장됩니다. 하위 폴더 템플릿으로 그 안의 파일을 정리할 수 있습니다."
   },
   "options_useCustomFolder": {
     "message": "폴더에 저장"
@@ -1691,6 +1709,9 @@
       }
     }
   },
+  "options_mangadexFirefoxPermissionDescription": {
+    "message": "MangaDex 이미지 서버를 이용하려면 HTTPS 사이트에 대한 접근 권한이 필요합니다. Tako는 이미지 URL과 다운로드 결과를 MangaDex에 전송합니다."
+  },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$에서는 이미지 서버 주소가 동적으로 결정됩니다. 사용하려면 HTTPS 사이트 접근 권한이 필요합니다.",
     "placeholders": {
@@ -1838,6 +1859,9 @@
   "sidepanel_retryingSeries": {
     "message": "다시 시도 중…"
   },
+  "sidepanel_firefoxDefaultContainerRequired": {
+    "message": "챕터를 다운로드하려면 Firefox의 기본 컨테이너에서 이 작품을 여세요."
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "작품을 불러오지 못했습니다"
   },
@@ -1851,6 +1875,14 @@
     "message": "Chrome 확장 프로그램 설정에서 Tako에 $HOST$ 액세스 권한을 허용한 다음 다시 시도하세요.",
     "placeholders": {
       "host": { "content": "$1" }
+    }
+  },
+  "sidepanel_firefoxSeriesHostPermissionRequired": {
+    "message": "Firefox 부가 기능 관리자에서 Tako에 $HOST$ 액세스 권한을 허용한 다음 다시 시도하세요.",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
     }
   },
   "sidepanel_retrySeriesContext": {
@@ -1910,6 +1942,9 @@
   "progressStage_sendingToChrome": {
     "message": "Chrome으로 전송 중"
   },
+  "progressStage_sendingToFirefox": {
+    "message": "Firefox으로 전송 중"
+  },
   "progressStage_savingToFolder": {
     "message": "폴더에 저장 중"
   },
@@ -1961,11 +1996,17 @@
   "destination_taskChrome": {
     "message": "Chrome 다운로드"
   },
+  "destination_taskFirefox": {
+    "message": "Firefox 다운로드"
+  },
   "destination_taskFolder": {
     "message": "선택한 폴더"
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "Chrome의 파일 저장을 확인하지 못했습니다. 재시도하면 중복 파일이 생길 수 있습니다."
+  },
+  "downloadError_firefoxOutputUnconfirmed": {
+    "message": "Firefox의 파일 저장을 확인하지 못했습니다. 재시도하면 중복 파일이 생길 수 있습니다."
   },
   "taskFolder_originalUnavailable": {
     "message": "이 작업의 원래 저장 위치를 사용할 수 없습니다. 새 작업을 만드세요."
@@ -2098,6 +2139,9 @@
   },
   "sidepanel_cancelTaskNote": {
     "message": "저장된 파일은 유지되며 Chrome으로 전달된 전송은 계속됩니다."
+  },
+  "sidepanel_firefoxCancelTaskNote": {
+    "message": "저장된 파일은 유지되며 Firefox으로 전달된 전송은 계속됩니다."
   },
   "sidepanel_keepDownloading": {
     "message": "다운로드 계속"
@@ -2263,6 +2307,9 @@
   },
   "sidepanel_checkDownloads": {
     "message": "다운로드 확인"
+  },
+  "sidepanel_openDownloadsFolder": {
+    "message": "다운로드 폴더 열기"
   },
   "sidepanel_chapterResults": {
     "message": "챕터 결과"

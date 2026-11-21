@@ -2,6 +2,7 @@ import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
 import { matchUrl } from "@/src/site-integrations/url-matcher"
 import logger from "@/src/runtime/logger"
+import { isSupportedBrowsingContext } from "./tab-browsing-context"
 import {
   isLoadingTabContext,
   isMangaPageState,
@@ -58,6 +59,8 @@ interface TabCacheDependencies {
     | (Pick<chrome.tabs.Tab, "url" | "pendingUrl"> & {
         active?: boolean
         windowId?: number
+        incognito?: boolean
+        cookieStoreId?: string
       })
     | undefined
   >
@@ -501,6 +504,7 @@ class TabContextCache {
     try {
       const tab = await this.dependencies.getTab(tabId)
       if (!tab?.active || tab.windowId !== windowId) return undefined
+      if (!isSupportedBrowsingContext(tab)) return undefined
       if (typeof tab.pendingUrl === "string" && tab.pendingUrl.length > 0)
         return undefined
       if (typeof tab.url !== "string" || tab.url.length === 0) return undefined

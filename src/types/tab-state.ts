@@ -50,7 +50,10 @@ export interface LoadingTabContext {
 
 export interface TabContextError {
   error: string
-  reason?: "host_permission_required" | "provider_access_denied"
+  reason?:
+    | "host_permission_required"
+    | "provider_access_denied"
+    | "unsupported_browsing_context"
   hostPermissionHostname?: string
   sourceUrl?: string
 }

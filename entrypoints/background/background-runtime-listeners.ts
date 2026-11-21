@@ -84,7 +84,7 @@ class BackgroundRuntimeListeners {
   }
 
   private registerTabReplacement(): void {
-    chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+    chrome.tabs.onReplaced?.addListener((addedTabId, removedTabId) => {
       void (async () => {
         try {
           await this.deps.waitForReadiness("integrations-ready")

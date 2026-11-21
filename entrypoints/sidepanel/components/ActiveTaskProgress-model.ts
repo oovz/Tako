@@ -1,6 +1,7 @@
 import type { ActiveTaskProgress as ProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value))
@@ -136,7 +137,8 @@ function getProgressChapterLabel(
 }
 
 function getSavingCaption(outputMode: QueueTaskSummary["outputMode"]): string {
-  if (outputMode === "downloads-api") return t("progressStage_sendingToChrome")
+  if (outputMode === "downloads-api")
+    return tBrowser("progressStage_sendingToChrome")
   if (outputMode === "fsa") return t("progressStage_savingToFolder")
   return t("progressStage_saving")
 }

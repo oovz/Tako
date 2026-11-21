@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "漫画下载，就在浏览器里。 在 Chrome 侧边栏选好章节，开始下载后可以继续浏览。"
   },
+  "extDescriptionFirefox": {
+    "message": "漫画下载，就在浏览器里。在 Firefox 侧栏选好章节，开始下载后可以继续浏览。"
+  },
   "common_all": {
     "message": "全部"
   },
@@ -100,6 +103,9 @@
   },
   "sidepanel_checkDownloadsFailed": {
     "message": "无法打开 Chrome 下载内容。"
+  },
+  "sidepanel_openDownloadsFolderFailed": {
+    "message": "无法打开下载文件夹。"
   },
   "sidepanel_taskStoppedEarly": {
     "message": "下载在完成前停止。"
@@ -280,6 +286,9 @@
   "sidepanel_cancelProgressWarning": {
     "message": "停止此任务剩余的处理。Chrome 已接受的下载会继续，请在 Chrome 下载页面管理。"
   },
+  "sidepanel_firefoxCancelProgressWarning": {
+    "message": "停止此任务剩余的处理。Firefox 已接受的下载会继续，请在 Firefox 下载页面管理。"
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下载",
     "placeholders": {
@@ -437,6 +446,9 @@
   },
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome 未能完成文件保存。"
+  },
+  "downloadError_firefoxDownloadInterrupted": {
+    "message": "Firefox 未能完成文件保存。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 无法创建压缩包。"
@@ -671,6 +683,9 @@
   "options_uiLanguageDesc": {
     "message": "应用于 Tako 的侧边栏和设置。扩展名称仍由 Chrome 本地化。"
   },
+  "options_firefoxUiLanguageDesc": {
+    "message": "应用于 Tako 的侧栏和设置。扩展名称仍由 Firefox 本地化。"
+  },
   "options_languageAutomatic": {
     "message": "自动（浏览器语言）"
   },
@@ -694,6 +709,9 @@
   },
   "options_downloadDestination": {
     "message": "新任务的默认保存位置"
+  },
+  "options_firefoxDownloadFolder": {
+    "message": "文件会保存到 Firefox 设置中指定的下载文件夹。子文件夹模板用于整理该文件夹中的文件。"
   },
   "options_useCustomFolder": {
     "message": "保存到文件夹"
@@ -1688,6 +1706,9 @@
       }
     }
   },
+  "options_mangadexFirefoxPermissionDescription": {
+    "message": "MangaDex 的图片服务器需要 HTTPS 网站访问权限。Tako 会将图片网址和下载结果发送给 MangaDex。"
+  },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$ 使用动态选择的图片服务器。启用时会请求访问 HTTPS 网站的权限。",
     "placeholders": {
@@ -1835,6 +1856,9 @@
   "sidepanel_retryingSeries": {
     "message": "正在重试…"
   },
+  "sidepanel_firefoxDefaultContainerRequired": {
+    "message": "请在 Firefox 的默认容器中打开此作品，以下载章节。"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "无法加载此漫画"
   },
@@ -1848,6 +1872,14 @@
     "message": "请在 Chrome 的扩展程序设置中允许 Tako 访问 $HOST$，然后重试。",
     "placeholders": {
       "host": { "content": "$1" }
+    }
+  },
+  "sidepanel_firefoxSeriesHostPermissionRequired": {
+    "message": "请在 Firefox 的附加组件管理器中允许 Tako 访问 $HOST$，然后重试。",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
     }
   },
   "sidepanel_retrySeriesContext": {
@@ -1907,6 +1939,9 @@
   "progressStage_sendingToChrome": {
     "message": "正在发送到 Chrome"
   },
+  "progressStage_sendingToFirefox": {
+    "message": "正在发送到 Firefox"
+  },
   "progressStage_savingToFolder": {
     "message": "正在保存到文件夹"
   },
@@ -1949,11 +1984,17 @@
   "destination_taskChrome": {
     "message": "Chrome 下载"
   },
+  "destination_taskFirefox": {
+    "message": "Firefox 下载"
+  },
   "destination_taskFolder": {
     "message": "所选文件夹"
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "无法确认 Chrome 是否已保存文件。重试可能会产生重复文件。"
+  },
+  "downloadError_firefoxOutputUnconfirmed": {
+    "message": "无法确认 Firefox 是否已保存文件。重试可能会产生重复文件。"
   },
   "taskFolder_originalUnavailable": {
     "message": "此任务的原始保存位置不可用。请创建新任务。"
@@ -2086,6 +2127,9 @@
   },
   "sidepanel_cancelTaskNote": {
     "message": "已保存的文件将保留，已交给 Chrome 的传输将继续。"
+  },
+  "sidepanel_firefoxCancelTaskNote": {
+    "message": "已保存的文件将保留，已交给 Firefox 的传输将继续。"
   },
   "sidepanel_keepDownloading": {
     "message": "继续下载"
@@ -2251,6 +2295,9 @@
   },
   "sidepanel_checkDownloads": {
     "message": "查看下载记录"
+  },
+  "sidepanel_openDownloadsFolder": {
+    "message": "打开下载文件夹"
   },
   "sidepanel_chapterResults": {
     "message": "章节结果"

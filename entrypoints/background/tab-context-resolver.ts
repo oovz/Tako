@@ -20,6 +20,7 @@ import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+import { isSupportedBrowsingContext } from "./tab-browsing-context"
 
 type TabContextCache = ReturnType<typeof createTabContextCache>
 type TabContextResolutionOutcome = "completed" | "retry"
@@ -523,12 +524,26 @@ class TabContextResolver {
     claim: Omit<TabResolutionRequest, "url"> & { url: string | undefined },
     options: ResolveTabContextOptions
   ): Promise<TabContextResolutionOutcome> {
-    const { tabId, windowId, requestId, url, ownerSignal } = claim
+    const { tab, tabId, windowId, requestId, url, ownerSignal } = claim
     const request = { requestId, windowId, expectedUrl: url, ownerSignal }
     if (!url) {
       await initializeTabContext(
         this.deps,
         { context: "unsupported" },
+        tabId,
+        request
+      )
+      return "completed"
+    }
+    if (!isSupportedBrowsingContext(tab) && matchUrl(url)) {
+      await initializeTabContext(
+        this.deps,
+        {
+          context: "error",
+          error:
+            "Open this series in Firefox’s default container to download chapters.",
+          reason: "unsupported_browsing_context",
+        },
         tabId,
         request
       )

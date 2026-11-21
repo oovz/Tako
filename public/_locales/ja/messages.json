@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "漫画のダウンロードを、ブラウザで。 Chrome のサイドパネルで話を選んでダウンロード。保存中も閲覧を続けられます。"
   },
+  "extDescriptionFirefox": {
+    "message": "漫画のダウンロードを、ブラウザで。Firefox のサイドバーで話を選んでダウンロード。保存中も閲覧を続けられます。"
+  },
   "common_all": {
     "message": "すべて"
   },
@@ -100,6 +103,9 @@
   },
   "sidepanel_checkDownloadsFailed": {
     "message": "Chrome のダウンロードを開けませんでした。"
+  },
+  "sidepanel_openDownloadsFolderFailed": {
+    "message": "ダウンロードフォルダーを開けませんでした。"
   },
   "sidepanel_taskStoppedEarly": {
     "message": "ダウンロードが完了する前に停止しました。"
@@ -280,6 +286,9 @@
   "sidepanel_cancelProgressWarning": {
     "message": "このタスクの残りの処理を停止します。Chrome がすでに受け付けたダウンロードは続行されます。Chrome のダウンロードで管理してください。"
   },
+  "sidepanel_firefoxCancelProgressWarning": {
+    "message": "このタスクの残りの処理を停止します。Firefox がすでに受け付けたダウンロードは続行されます。Firefox のダウンロードで管理してください。"
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ ダウンロード中",
     "placeholders": {
@@ -437,6 +446,9 @@
   },
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome で出力ファイルを保存できませんでした。"
+  },
+  "downloadError_firefoxDownloadInterrupted": {
+    "message": "Firefox で出力ファイルを保存できませんでした。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "アーカイブを作成できませんでした。"
@@ -671,6 +683,9 @@
   "options_uiLanguageDesc": {
     "message": "Takoのサイドパネルと設定に適用されます。拡張機能名の言語はChromeの設定に従います。"
   },
+  "options_firefoxUiLanguageDesc": {
+    "message": "Takoのサイドバーと設定に適用されます。拡張機能名の言語はFirefoxの設定に従います。"
+  },
   "options_languageAutomatic": {
     "message": "自動（ブラウザの言語）"
   },
@@ -694,6 +709,9 @@
   },
   "options_downloadDestination": {
     "message": "新しいタスクの保存先の既定値"
+  },
+  "options_firefoxDownloadFolder": {
+    "message": "ファイルは Firefox の設定で指定したダウンロードフォルダーに保存されます。サブフォルダーのテンプレートで、その中のファイルを整理できます。"
   },
   "options_useCustomFolder": {
     "message": "フォルダーに保存"
@@ -1688,6 +1706,9 @@
       }
     }
   },
+  "options_mangadexFirefoxPermissionDescription": {
+    "message": "MangaDex の画像サーバーを利用するには HTTPS サイトへのアクセスが必要です。Tako は画像の URL とダウンロード結果を MangaDex に送信します。"
+  },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$ は動的に選択される画像サーバーを使用します。有効にすると、HTTPS サイトへのアクセス許可を求めます。",
     "placeholders": {
@@ -1835,6 +1856,9 @@
   "sidepanel_retryingSeries": {
     "message": "再試行中…"
   },
+  "sidepanel_firefoxDefaultContainerRequired": {
+    "message": "チャプターをダウンロードするには、Firefox の既定のコンテナーでこの作品を開いてください。"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "シリーズ情報を読み込めませんでした"
   },
@@ -1848,6 +1872,14 @@
     "message": "Chrome の拡張機能設定で Tako に $HOST$ へのアクセスを許可してから、再試行してください。",
     "placeholders": {
       "host": { "content": "$1" }
+    }
+  },
+  "sidepanel_firefoxSeriesHostPermissionRequired": {
+    "message": "Firefox のアドオンマネージャーで Tako に $HOST$ へのアクセスを許可してから、再試行してください。",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
     }
   },
   "sidepanel_retrySeriesContext": {
@@ -1907,6 +1939,9 @@
   "progressStage_sendingToChrome": {
     "message": "Chrome に送信中"
   },
+  "progressStage_sendingToFirefox": {
+    "message": "Firefox に送信中"
+  },
   "progressStage_savingToFolder": {
     "message": "フォルダーに保存中"
   },
@@ -1949,11 +1984,17 @@
   "destination_taskChrome": {
     "message": "Chrome のダウンロード"
   },
+  "destination_taskFirefox": {
+    "message": "Firefox のダウンロード"
+  },
   "destination_taskFolder": {
     "message": "選択したフォルダー"
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "Chrome でのファイル保存を確認できませんでした。再試行するとファイルが重複する可能性があります。"
+  },
+  "downloadError_firefoxOutputUnconfirmed": {
+    "message": "Firefox でのファイル保存を確認できませんでした。再試行するとファイルが重複する可能性があります。"
   },
   "taskFolder_originalUnavailable": {
     "message": "このタスクの元の保存先は利用できません。新しいタスクを作成してください。"
@@ -2086,6 +2127,9 @@
   },
   "sidepanel_cancelTaskNote": {
     "message": "保存済みファイルは残ります。Chrome に渡した転送は続行します。"
+  },
+  "sidepanel_firefoxCancelTaskNote": {
+    "message": "保存済みファイルは残ります。Firefox に渡した転送は続行します。"
   },
   "sidepanel_keepDownloading": {
     "message": "ダウンロードを続ける"
@@ -2251,6 +2295,9 @@
   },
   "sidepanel_checkDownloads": {
     "message": "ダウンロードを確認"
+  },
+  "sidepanel_openDownloadsFolder": {
+    "message": "ダウンロードフォルダーを開く"
   },
   "sidepanel_chapterResults": {
     "message": "チャプターの結果"

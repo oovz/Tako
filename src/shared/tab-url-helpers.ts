@@ -1,11 +1,12 @@
 /**
- * Shared helpers for classifying Chrome tab URLs.
+ * Shared helpers for classifying browser tab URLs.
  *
  * Ref: https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts#matchAndGlob
  */
 
 const INTERNAL_URL_PREFIXES = [
   "chrome-extension://",
+  "moz-extension://",
   "chrome://",
   "edge://",
   "about:",
@@ -25,7 +26,11 @@ export function isInternalUrl(url: string | undefined | null): boolean {
 }
 
 export function isExtensionUrl(url: string | undefined | null): boolean {
-  return typeof url === "string" && url.startsWith("chrome-extension://")
+  return (
+    !!url &&
+    (url.startsWith("chrome-extension://") ||
+      url.startsWith("moz-extension://"))
+  )
 }
 
 export function resolveTabUrlForSupportCheck(

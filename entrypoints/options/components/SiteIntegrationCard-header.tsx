@@ -64,9 +64,11 @@ export function SiteIntegrationCardHeader({
           </CardDescription>
           {siteIntegration.requiresBroadHttpsPermission && !isEnabled && (
             <p className="max-w-xl text-xs text-muted-foreground">
-              {t("options_broadHostPermissionDescription", [
-                siteIntegration.name,
-              ])}
+              {import.meta.env.FIREFOX && siteIntegration.id === "mangadex"
+                ? t("options_mangadexFirefoxPermissionDescription")
+                : t("options_broadHostPermissionDescription", [
+                    siteIntegration.name,
+                  ])}
             </p>
           )}
         </div>

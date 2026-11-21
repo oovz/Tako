@@ -7,6 +7,7 @@ import { openOptionsPage } from "@/src/runtime/open-options"
 import logger from "@/src/runtime/logger"
 import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { getDisplayName } from "@/src/site-integrations/catalog"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 import { t } from "@/src/runtime/i18n"
 import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
 import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
@@ -207,8 +208,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
     async (
       link: RecoveryTaskLink["id"],
       open: () => Promise<unknown>,
-      failureKey:
-        "taskFolder_openActionsFailed" | "sidepanel_checkDownloadsFailed"
+      failureMessage: () => string
     ) => {
       if (pendingLink.current) return
       pendingLink.current = link
@@ -221,7 +221,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
           "[CommandCenter] Could not open a task recovery action:",
           error
         )
-        setRecoveryLinkError(t(failureKey))
+        setRecoveryLinkError(failureMessage())
       } finally {
         pendingLink.current = null
         setOpeningLink(null)
@@ -232,13 +232,19 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
   const checkDownloads: RecoveryTaskLink = {
     id: "check-downloads",
     Icon: Download,
-    label: t("sidepanel_checkDownloads"),
+    label: tBrowser("sidepanel_checkDownloads"),
     pending: openingLink === "check-downloads",
     invoke: () =>
       openRecoveryLink(
         "check-downloads",
-        () => chrome.tabs.create({ url: "chrome://downloads/" }),
-        "sidepanel_checkDownloadsFailed"
+        async () => {
+          if (import.meta.env.FIREFOX) {
+            chrome.downloads.showDefaultFolder()
+          } else {
+            await chrome.tabs.create({ url: "chrome://downloads/" })
+          }
+        },
+        () => tBrowser("sidepanel_checkDownloadsFailed")
       ),
   }
   const openFolderActions: RecoveryTaskLink = {
@@ -250,7 +256,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
       openRecoveryLink(
         "open-folder-actions",
         () => openOptionsPage("activity", task.id),
-        "taskFolder_openActionsFailed"
+        () => t("taskFolder_openActionsFailed")
       ),
   }
   const recoveryLinks = [
@@ -561,7 +567,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
           onEscape={props.onDismissCancel}
         >
           <strong>{t("sidepanel_cancelTaskQuestion")}</strong>
-          <p>{t("sidepanel_cancelTaskNote")}</p>
+          <p>{tBrowser("sidepanel_cancelTaskNote")}</p>
           <div>
             <button
               ref={keepButton}

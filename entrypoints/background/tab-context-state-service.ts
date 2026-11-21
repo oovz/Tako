@@ -47,7 +47,7 @@ export class TabContextStateService {
 
   async initialize(): Promise<void> {
     if (this.initialized) return
-    await chrome.storage.session.setAccessLevel({
+    await chrome.storage.session.setAccessLevel?.({
       accessLevel: "TRUSTED_CONTEXTS",
     })
     this.initialized = true

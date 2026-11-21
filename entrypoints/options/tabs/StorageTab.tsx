@@ -1,6 +1,7 @@
 import React, { useCallback } from "react"
 
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 import { t } from "@/src/runtime/i18n"
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
@@ -41,6 +42,7 @@ export function StorageTab({
   )
 
   const showNoArchiveWarning =
+    !import.meta.env.FIREFOX &&
     settings.downloads.defaultFormat === "none" &&
     settings.downloads.destination === "downloads-api"
 
@@ -64,9 +66,10 @@ export function StorageTab({
         <StorageTemplates
           downloads={settings.downloads}
           destinationName={
+            !import.meta.env.FIREFOX &&
             settings.downloads.destination === "file-system-access"
               ? selectedFolderName || t("destination_taskFolder")
-              : t("destination_taskChrome")
+              : tBrowser("destination_taskChrome")
           }
           onChange={updateDownloads}
         />

@@ -83,7 +83,11 @@ const LoadingTabContextSchema = z.strictObject({
 export const TabContextErrorSchema = z.strictObject({
   error: NonEmptyStringSchema,
   reason: z
-    .enum(["host_permission_required", "provider_access_denied"])
+    .enum([
+      "host_permission_required",
+      "provider_access_denied",
+      "unsupported_browsing_context",
+    ])
     .optional(),
   hostPermissionHostname: NonEmptyStringSchema.optional(),
   sourceUrl: NonEmptyStringSchema.optional(),

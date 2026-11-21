@@ -157,7 +157,7 @@ export class ProviderNetworkPolicyContinuationCoordinator {
       SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
       {
         delayInMinutes: CONTINUATION_ALARM_DELAY_MINUTES,
-        persistAcrossSessions: true,
+        ...(!import.meta.env.FIREFOX && { persistAcrossSessions: true }),
       }
     )
     this.continuationAlarmScheduled = true

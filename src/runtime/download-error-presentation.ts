@@ -3,8 +3,15 @@ import {
   type DownloadErrorCategory,
 } from "@/src/shared/download-contract"
 import { t } from "@/src/runtime/i18n"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 
-const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
+const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<
+  Exclude<
+    DownloadErrorCategory,
+    "browser_download_interrupted" | "browser_output_unconfirmed"
+  >,
+  string
+> = {
   network_unavailable: "downloadError_networkUnavailable",
   provider_rate_limited: "downloadError_providerRateLimited",
   provider_access_denied: "downloadError_providerAccessDenied",
@@ -14,8 +21,6 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   folder_unavailable: "downloadError_folderUnavailable",
   folder_write_failed: "downloadError_folderWriteFailed",
   disk_full: "downloadError_diskFull",
-  browser_download_interrupted: "downloadError_browserDownloadInterrupted",
-  browser_output_unconfirmed: "downloadError_browserOutputUnconfirmed",
   archive_creation_failed: "downloadError_archiveCreationFailed",
   unknown: "downloadError_unknown",
 }
@@ -26,6 +31,10 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
  */
 export function getDownloadErrorMessage(category: unknown): string {
   const normalized = normalizeDownloadErrorCategory(category) ?? "unknown"
+  if (normalized === "browser_download_interrupted")
+    return tBrowser("downloadError_browserDownloadInterrupted")
+  if (normalized === "browser_output_unconfirmed")
+    return tBrowser("downloadError_browserOutputUnconfirmed")
   return t(DOWNLOAD_ERROR_MESSAGE_KEYS[normalized])
 }
 
@@ -52,7 +61,7 @@ export interface DownloadCancelPresentation {
 export function getDownloadCancelPresentation(): DownloadCancelPresentation {
   return {
     title: t("sidepanel_cancelThisDownload"),
-    description: t("sidepanel_cancelProgressWarning"),
+    description: tBrowser("sidepanel_cancelProgressWarning"),
     confirmLabel: t("common_yes"),
   }
 }

@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "Manga downloads, right in your browser. Queue chapters from Chrome’s side panel and keep browsing while they download."
   },
+  "extDescriptionFirefox": {
+    "message": "Manga downloads, right in your browser. Queue chapters from Firefox’s sidebar and keep browsing while they download."
+  },
   "common_all": {
     "message": "All"
   },
@@ -100,6 +103,9 @@
   },
   "sidepanel_checkDownloadsFailed": {
     "message": "Could not open Chrome Downloads."
+  },
+  "sidepanel_openDownloadsFolderFailed": {
+    "message": "Could not open the downloads folder."
   },
   "sidepanel_taskStoppedEarly": {
     "message": "The download stopped before it finished."
@@ -280,6 +286,9 @@
   "sidepanel_cancelProgressWarning": {
     "message": "Stops this task’s remaining work. Downloads already accepted by Chrome continue; manage them in Chrome Downloads."
   },
+  "sidepanel_firefoxCancelProgressWarning": {
+    "message": "Stops this task’s remaining work. Downloads already accepted by Firefox continue; manage them in Firefox Downloads."
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ downloading",
     "placeholders": {
@@ -437,6 +446,9 @@
   },
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome could not finish saving the output."
+  },
+  "downloadError_firefoxDownloadInterrupted": {
+    "message": "Firefox could not finish saving the output."
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako could not create the archive."
@@ -671,6 +683,9 @@
   "options_uiLanguageDesc": {
     "message": "Applies to Tako's side panel and settings. Chrome continues to localize the extension name."
   },
+  "options_firefoxUiLanguageDesc": {
+    "message": "Applies to Tako's sidebar and settings. Firefox continues to localize the extension name."
+  },
   "options_languageAutomatic": {
     "message": "Automatic (browser language)"
   },
@@ -694,6 +709,9 @@
   },
   "options_downloadDestination": {
     "message": "Download defaults for new tasks"
+  },
+  "options_firefoxDownloadFolder": {
+    "message": "Files go to the download folder set in Firefox Settings. Your subfolder template organizes files inside it."
   },
   "options_useCustomFolder": {
     "message": "Save to a folder"
@@ -1691,6 +1709,9 @@
       }
     }
   },
+  "options_mangadexFirefoxPermissionDescription": {
+    "message": "MangaDex needs access to HTTPS sites for its image servers and requires Tako to send image URLs and download results to MangaDex."
+  },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$ uses dynamically selected image servers. Enabling it asks for access to HTTPS sites.",
     "placeholders": {
@@ -1838,6 +1859,9 @@
   "sidepanel_retryingSeries": {
     "message": "Retrying…"
   },
+  "sidepanel_firefoxDefaultContainerRequired": {
+    "message": "Open this series in Firefox’s default container to download chapters."
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "Couldn’t load this series"
   },
@@ -1851,6 +1875,14 @@
     "message": "Allow Tako to access $HOST$ in Chrome’s extension settings, then retry.",
     "placeholders": {
       "host": { "content": "$1" }
+    }
+  },
+  "sidepanel_firefoxSeriesHostPermissionRequired": {
+    "message": "Allow Tako to access $HOST$ in the Firefox Add-ons Manager, then retry.",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
     }
   },
   "sidepanel_retrySeriesContext": {
@@ -1910,6 +1942,9 @@
   "progressStage_sendingToChrome": {
     "message": "Sending to Chrome"
   },
+  "progressStage_sendingToFirefox": {
+    "message": "Sending to Firefox"
+  },
   "progressStage_savingToFolder": {
     "message": "Saving to folder"
   },
@@ -1961,11 +1996,17 @@
   "destination_taskChrome": {
     "message": "Chrome Downloads"
   },
+  "destination_taskFirefox": {
+    "message": "Firefox Downloads"
+  },
   "destination_taskFolder": {
     "message": "Selected folder"
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "Chrome file saving could not be confirmed. Retrying may create duplicate files."
+  },
+  "downloadError_firefoxOutputUnconfirmed": {
+    "message": "Firefox file saving could not be confirmed. Retrying may create duplicate files."
   },
   "taskFolder_originalUnavailable": {
     "message": "This task’s original destination is unavailable. Create a new task."
@@ -2098,6 +2139,9 @@
   },
   "sidepanel_cancelTaskNote": {
     "message": "Saved files stay. Transfers already in Chrome Downloads continue."
+  },
+  "sidepanel_firefoxCancelTaskNote": {
+    "message": "Saved files stay. Transfers already in Firefox Downloads continue."
   },
   "sidepanel_keepDownloading": {
     "message": "Keep downloading"
@@ -2263,6 +2307,9 @@
   },
   "sidepanel_checkDownloads": {
     "message": "Check downloads"
+  },
+  "sidepanel_openDownloadsFolder": {
+    "message": "Open downloads folder"
   },
   "sidepanel_chapterResults": {
     "message": "Chapter results"

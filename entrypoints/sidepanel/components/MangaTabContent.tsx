@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useRef, type ReactNode } from "react"
 import { playPanelMotion } from "../hooks/panel-motion"
 import type { SidepanelSeriesContextData } from "../hooks/useSidepanelSeriesContext"
 import { t } from "@/src/runtime/i18n"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 
 export function MangaTabContent({
   data,
@@ -75,7 +76,11 @@ export function MangaTabContent({
   const RetryIcon = retrying ? LoaderCircle : RotateCw
   return (
     <div className="manga-tab-content" ref={content} tabIndex={-1}>
-      {showRecovery ? (
+      {data.seriesErrorReason === "unsupported_browsing_context" ? (
+        <div className="manga-load-recovery" role="status">
+          <p>{t("sidepanel_firefoxDefaultContainerRequired")}</p>
+        </div>
+      ) : showRecovery ? (
         <div className="manga-load-recovery" data-retrying={retrying}>
           <div>
             <div role="status" aria-atomic="true">
@@ -88,7 +93,7 @@ export function MangaTabContent({
               </h2>
               <p aria-hidden={retrying || undefined}>
                 {data.hostPermissionHostname
-                  ? t("sidepanel_seriesHostPermissionRequired", [
+                  ? tBrowser("sidepanel_seriesHostPermissionRequired", [
                       data.hostPermissionHostname,
                     ])
                   : t(

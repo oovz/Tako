@@ -11,7 +11,12 @@ function classifyWorkerPrincipal(
 ): RuntimeMessagePrincipal {
   if (sender.tab !== undefined) return "unknown"
   if (url?.pathname === "/offscreen.html") return "offscreen"
-  if (sender.url === undefined || url?.pathname === "/background.js")
+  if (
+    sender.url === undefined ||
+    url?.pathname === "/background.js" ||
+    (url?.protocol === "moz-extension:" &&
+      url.pathname === "/_generated_background_page.html")
+  )
     return "background"
   return "unknown"
 }
@@ -23,9 +28,15 @@ function parseOwnExtensionUrl(
   if (!value) return null
   try {
     const url = new URL(value)
-    return url.protocol === "chrome-extension:" && url.hostname === extensionId
-      ? url
-      : null
+    if (url.protocol === "chrome-extension:" && url.hostname === extensionId)
+      return url
+    if (url.protocol === "moz-extension:" && import.meta.env.FIREFOX) {
+      // Firefox assigns a profile-local origin distinct from runtime.id.
+      const ownUrl = new URL(chrome.runtime.getURL("/"))
+      if (url.protocol === ownUrl.protocol && url.host === ownUrl.host)
+        return url
+    }
+    return null
   } catch {
     return null
   }
@@ -51,7 +62,8 @@ function classifyContentPrincipal(
   sender: chrome.runtime.MessageSender
 ): RuntimeMessagePrincipal {
   return typeof sender.tab?.id === "number" &&
-    !sender.url?.startsWith("chrome-extension://")
+    !sender.url?.startsWith("chrome-extension://") &&
+    !sender.url?.startsWith("moz-extension://")
     ? "content"
     : "unknown"
 }

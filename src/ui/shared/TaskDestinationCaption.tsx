@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { loadDownloadRootHandle } from "@/src/storage/fs-access"
 import type { TaskDestination } from "@/src/types/state-snapshots"
 import { t } from "@/src/runtime/i18n"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 
 function useDestinationFolderName(handleId: string | null) {
   const [folder, setFolder] = useState<{ id: string; name: string } | null>(
@@ -39,7 +40,7 @@ export function TaskDestinationCaption({
   const folderName = useDestinationFolderName(handleId)
   const root =
     destination.kind === "downloads-api"
-      ? t("destination_taskChrome")
+      ? tBrowser("destination_taskChrome")
       : folderName || t("destination_taskFolder")
   const label = [root, requestedPath].filter(Boolean).join("/")
   return (

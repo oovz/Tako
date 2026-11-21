@@ -97,11 +97,11 @@ export function buildSessionRefererRule(
     id: declaration.id,
     priority: declaration.priority ?? 1,
     action: {
-      type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+      type: "modifyHeaders",
       requestHeaders: [
         {
           header: "referer",
-          operation: chrome.declarativeNetRequest.HeaderOperation.SET,
+          operation: "set",
           value: declaration.referer,
         },
       ],
@@ -109,11 +109,7 @@ export function buildSessionRefererRule(
     condition: {
       initiatorDomains: [extensionId],
       requestDomains: [...declaration.requestDomains],
-      resourceTypes: declaration.resourceTypes.map((resourceType) =>
-        resourceType === "xmlhttprequest"
-          ? chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST
-          : chrome.declarativeNetRequest.ResourceType.OTHER
-      ),
+      resourceTypes: [...declaration.resourceTypes],
     },
   }
 }
@@ -224,7 +220,10 @@ export class SiteIntegrationSessionRuleManager {
         })
         continue
       }
-      addRules.push(buildSessionRefererRule(declaration, chrome.runtime.id))
+      const initiator = import.meta.env.FIREFOX
+        ? new URL(chrome.runtime.getURL("/")).hostname
+        : chrome.runtime.id
+      addRules.push(buildSessionRefererRule(declaration, initiator))
     }
 
     await updateSessionRules({
@@ -263,7 +262,7 @@ export class SiteIntegrationSessionRuleManager {
       ]
     await chrome.alarms.create(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM, {
       delayInMinutes,
-      persistAcrossSessions: true,
+      ...(!import.meta.env.FIREFOX && { persistAcrossSessions: true }),
     })
     this.retryAlarmScheduled = true
     this.retryAttempt = Math.min(

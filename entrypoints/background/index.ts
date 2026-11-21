@@ -4,6 +4,7 @@ import { installDiagnosticCapture } from "@/src/runtime/diagnostic-capture"
 import { createBackgroundCoverPreviewMessageHandlers } from "./background-cover-preview-message-handlers"
 import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
+import { browser } from "wxt/browser"
 
 import logger from "@/src/runtime/logger"
 import { createRuntimeMessageListener } from "@/src/runtime/runtime-message-dispatcher"
@@ -30,6 +31,7 @@ import {
 import { registerSiteIntegrationEnablementListener } from "@/src/runtime/site-integration-initialization"
 import { getDefinition } from "@/src/site-integrations/catalog"
 import { includesManagedHostPermission } from "@/src/site-integrations/host-permission-service"
+import { includesMangadexReportingPermission } from "@/src/site-integrations/mangadex/report-permission"
 import {
   reconcileFsaDestinationActionItem,
   reconcileHostPermissionActionItem,
@@ -57,7 +59,10 @@ import {
   setLivenessAlarmArmed,
 } from "@/entrypoints/background/offscreen-lifecycle"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
-import { requestBlobRevocation } from "@/entrypoints/background/native-output-blob-revocation"
+import {
+  isBlobProducerAbsent,
+  requestBlobRevocation,
+} from "@/entrypoints/background/native-output-blob-revocation"
 import { tabContextCache } from "@/entrypoints/background/tab-cache"
 import { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import { createTabUiCoordinator } from "@/entrypoints/background/tab-ui-coordinator"
@@ -159,6 +164,9 @@ const nativeOutputCoordinator = new NativeOutputCoordinator({
   queueRepository,
   queryOffscreenJob,
   requestBlobRevocation,
+  isBlobProducerAbsent: import.meta.env.FIREFOX
+    ? isBlobProducerAbsent
+    : undefined,
   ensureLivenessAlarm,
 })
 
@@ -295,15 +303,22 @@ export default defineBackground({
 
     // Event listeners are registered synchronously below. Versioned state
     // migration gates every storage-backed readiness phase and DNR read.
-    // The manifest's window-wide Side Panel keeps one document across tab switches.
-    try {
-      chrome.sidePanel
-        .setPanelBehavior({ openPanelOnActionClick: true })
-        .catch((error) => {
-          logger.debug("sidePanel.setPanelBehavior failed", error)
+    if (import.meta.env.FIREFOX) {
+      const { sidebarAction } = browser as typeof browser & {
+        sidebarAction: { open: () => Promise<void> }
+      }
+      browser.action.onClicked.addListener(() => {
+        void sidebarAction.open().catch((error: unknown) => {
+          logger.debug("Unable to open the Firefox sidebar", error)
         })
-    } catch (error) {
-      logger.debug("sidePanel.setPanelBehavior unavailable", error)
+      })
+      browser.runtime.onStartup.addListener(() => runtimeKernel.start())
+    } else {
+      void chrome.sidePanel
+        ?.setPanelBehavior({ openPanelOnActionClick: true })
+        .catch((error) =>
+          logger.debug("sidePanel.setPanelBehavior failed", error)
+        )
     }
 
     chrome.runtime.onMessage.addListener(backgroundRuntimeMessageListener)
@@ -393,7 +408,11 @@ export default defineBackground({
     })
 
     chrome.permissions.onRemoved.addListener((permissions) => {
-      if (!includesManagedHostPermission(permissions)) return
+      if (
+        !includesManagedHostPermission(permissions) &&
+        !includesMangadexReportingPermission(permissions)
+      )
+        return
       void reconcileIntegrationSupportAfterPermissionRemoval({
         refreshIntegrations: () => runtimeKernel.refreshIntegrations(),
         ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
@@ -408,7 +427,11 @@ export default defineBackground({
     })
 
     chrome.permissions.onAdded.addListener((permissions) => {
-      if (!includesManagedHostPermission(permissions)) return
+      if (
+        !includesManagedHostPermission(permissions) &&
+        !includesMangadexReportingPermission(permissions)
+      )
+        return
       void reconcileHostPermissionActionItem()
     })
 

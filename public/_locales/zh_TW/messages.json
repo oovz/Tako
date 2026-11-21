@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "漫畫下載，就在瀏覽器裡。 在 Chrome 側邊面板選好章節，開始下載後就能繼續瀏覽。"
   },
+  "extDescriptionFirefox": {
+    "message": "漫畫下載，就在瀏覽器裡。在 Firefox 側邊欄選好章節，開始下載後就能繼續瀏覽。"
+  },
   "common_all": {
     "message": "全部"
   },
@@ -100,6 +103,9 @@
   },
   "sidepanel_checkDownloadsFailed": {
     "message": "無法開啟 Chrome 下載內容。"
+  },
+  "sidepanel_openDownloadsFolderFailed": {
+    "message": "無法開啟下載資料夾。"
   },
   "sidepanel_taskStoppedEarly": {
     "message": "下載在完成前停止。"
@@ -280,6 +286,9 @@
   "sidepanel_cancelProgressWarning": {
     "message": "停止這個工作剩餘的處理。Chrome 已接受的下載會繼續，請在 Chrome 下載頁面管理。"
   },
+  "sidepanel_firefoxCancelProgressWarning": {
+    "message": "停止這個工作剩餘的處理。Firefox 已接受的下載會繼續，請在 Firefox 下載頁面管理。"
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下載",
     "placeholders": {
@@ -437,6 +446,9 @@
   },
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome 未能完成檔案儲存。"
+  },
+  "downloadError_firefoxDownloadInterrupted": {
+    "message": "Firefox 未能完成檔案儲存。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 無法建立壓縮檔。"
@@ -671,6 +683,9 @@
   "options_uiLanguageDesc": {
     "message": "套用於 Tako 的側邊欄和設定。擴充功能名稱仍由 Chrome 本地化。"
   },
+  "options_firefoxUiLanguageDesc": {
+    "message": "套用於 Tako 的側邊欄和設定。擴充功能名稱仍由 Firefox 本地化。"
+  },
   "options_languageAutomatic": {
     "message": "自動（瀏覽器語言）"
   },
@@ -694,6 +709,9 @@
   },
   "options_downloadDestination": {
     "message": "新任務的預設儲存位置"
+  },
+  "options_firefoxDownloadFolder": {
+    "message": "檔案會儲存到 Firefox 設定中指定的下載資料夾。子資料夾範本可整理該資料夾中的檔案。"
   },
   "options_useCustomFolder": {
     "message": "儲存至資料夾"
@@ -1688,6 +1706,9 @@
       }
     }
   },
+  "options_mangadexFirefoxPermissionDescription": {
+    "message": "MangaDex 的圖片伺服器需要 HTTPS 網站存取權限。Tako 會將圖片網址和下載結果傳送給 MangaDex。"
+  },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$ 使用動態選取的圖片伺服器。啟用時會要求存取 HTTPS 網站的權限。",
     "placeholders": {
@@ -1835,6 +1856,9 @@
   "sidepanel_retryingSeries": {
     "message": "正在重試…"
   },
+  "sidepanel_firefoxDefaultContainerRequired": {
+    "message": "請在 Firefox 的預設容器中開啟此作品，以下載章節。"
+  },
   "sidepanel_seriesLoadFailed": {
     "message": "無法載入這部漫畫"
   },
@@ -1848,6 +1872,14 @@
     "message": "請在 Chrome 的擴充功能設定中允許 Tako 存取 $HOST$，然後重試。",
     "placeholders": {
       "host": { "content": "$1" }
+    }
+  },
+  "sidepanel_firefoxSeriesHostPermissionRequired": {
+    "message": "請在 Firefox 的附加元件管理員中允許 Tako 存取 $HOST$，然後重試。",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
     }
   },
   "sidepanel_retrySeriesContext": {
@@ -1907,6 +1939,9 @@
   "progressStage_sendingToChrome": {
     "message": "正在傳送至 Chrome"
   },
+  "progressStage_sendingToFirefox": {
+    "message": "正在傳送至 Firefox"
+  },
   "progressStage_savingToFolder": {
     "message": "正在儲存至資料夾"
   },
@@ -1949,11 +1984,17 @@
   "destination_taskChrome": {
     "message": "Chrome 下載"
   },
+  "destination_taskFirefox": {
+    "message": "Firefox 下載"
+  },
   "destination_taskFolder": {
     "message": "所選資料夾"
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "無法確認 Chrome 是否已儲存檔案。重試可能會產生重複檔案。"
+  },
+  "downloadError_firefoxOutputUnconfirmed": {
+    "message": "無法確認 Firefox 是否已儲存檔案。重試可能會產生重複檔案。"
   },
   "taskFolder_originalUnavailable": {
     "message": "此任務的原始儲存位置無法使用。請建立新任務。"
@@ -2086,6 +2127,9 @@
   },
   "sidepanel_cancelTaskNote": {
     "message": "已儲存的檔案會保留，已交給 Chrome 的傳輸會繼續。"
+  },
+  "sidepanel_firefoxCancelTaskNote": {
+    "message": "已儲存的檔案會保留，已交給 Firefox 的傳輸會繼續。"
   },
   "sidepanel_keepDownloading": {
     "message": "繼續下載"
@@ -2251,6 +2295,9 @@
   },
   "sidepanel_checkDownloads": {
     "message": "查看下載紀錄"
+  },
+  "sidepanel_openDownloadsFolder": {
+    "message": "開啟下載資料夾"
   },
   "sidepanel_chapterResults": {
     "message": "章節結果"

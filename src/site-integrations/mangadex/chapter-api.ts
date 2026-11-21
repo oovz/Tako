@@ -38,6 +38,7 @@ import type { MangadexDispatchContext } from "./contracts/dispatch-context"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import { waitForMangadexDelay } from "./api-delay"
 import { createImageDownloadAdapter } from "../image-download-adapter"
+import { hasMangadexReportingConsent } from "./report-permission"
 
 type MangadexAtHomeReport = {
   url: string
@@ -87,19 +88,31 @@ async function reportToMangadexNetwork(
   )
 
   try {
-    const response = await integrationHttpClient.request({
-      integrationId: "mangadex",
-      endpointId: "mangadex-network-report",
-      url: MANGADEX_NETWORK_REPORT,
-      scope: "chapter",
-      init: {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(report),
-        signal: controller.signal,
-      },
-      rateLimitService,
-    })
+    const response = await rateLimitService.scheduleForIntegrationScope(
+      "mangadex",
+      "chapter",
+      async () => {
+        // A report can wait in the limiter while Firefox revokes consent.
+        if (import.meta.env.FIREFOX && !(await hasMangadexReportingConsent()))
+          return
+        controller.signal.throwIfAborted()
+        return integrationHttpClient.request({
+          integrationId: "mangadex",
+          endpointId: "mangadex-network-report",
+          url: MANGADEX_NETWORK_REPORT,
+          scope: "chapter",
+          init: {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(report),
+            signal: controller.signal,
+          },
+          rateLimitService,
+          skipRateLimit: true,
+        })
+      }
+    )
+    if (!response) return
     cancelResponseBody(response)
     if (!response.ok) {
       logger.debug(

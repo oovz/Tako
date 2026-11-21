@@ -4,6 +4,7 @@ import { useRef, type RefObject } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { SelectionChapterRow } from "./ChapterSelector"
 import { t } from "@/src/runtime/i18n"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { parseSettingsDocument } from "@/src/domain/settings/schema"
 import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
@@ -128,11 +129,10 @@ export function SelectionReview({
                   ? t("sidepanel_images")
                   : settings.downloads.defaultFormat.toUpperCase()}
                 {" · "}
-                {t(
-                  settings.downloads.destination === "file-system-access"
-                    ? "sidepanel_selectedFolder"
-                    : "sidepanel_chromeDownloads"
-                )}
+                {!import.meta.env.FIREFOX &&
+                settings.downloads.destination === "file-system-access"
+                  ? t("sidepanel_selectedFolder")
+                  : tBrowser("sidepanel_chromeDownloads")}
               </p>
             )}
             {errorMessage && (

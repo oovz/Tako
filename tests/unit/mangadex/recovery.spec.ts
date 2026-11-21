@@ -67,8 +67,67 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   vi.unstubAllGlobals()
 })
+
+it.each([
+  { granted: true, reports: 1 },
+  { granted: false, reports: 0 },
+])(
+  "sends $reports MangaDex@Home reports when Firefox consent at dispatch is $granted",
+  async ({ granted, reports }) => {
+    vi.stubEnv("FIREFOX", "true")
+    let consent = true
+    vi.stubGlobal("chrome", {
+      permissions: {
+        contains: async ({ data_collection }: { data_collection?: string[] }) =>
+          !data_collection?.includes("websiteActivity") || consent,
+      },
+    })
+    const reportUrl = "https://api.mangadex.network/report"
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input)
+      const response =
+        url === reportUrl
+          ? new Response(null, { status: 204 })
+          : new Response(new Uint8Array([1, 2, 3]), {
+              headers: { "content-type": "image/jpeg" },
+            })
+      Object.defineProperty(response, "url", { value: url })
+      return response
+    })
+
+    const entered = Promise.withResolvers<void>()
+    const admitReport = Promise.withResolvers<void>()
+    const finished = Promise.withResolvers<void>()
+    const opts = options(undefined, 0)
+    opts.runtime.rateLimitService = {
+      ...opts.runtime.rateLimitService,
+      scheduleForIntegrationScope: async (_id, scope, run) => {
+        if (scope !== "chapter") return await run()
+        entered.resolve()
+        await admitReport.promise
+        try {
+          return await run()
+        } finally {
+          finished.resolve()
+        }
+      },
+    } as RateLimitService
+
+    const image = await downloadMangadexChapterImage(imageUrl, opts)
+    image.liveResourceLease.release()
+    await entered.promise
+    consent = granted
+    admitReport.resolve()
+    await finished.promise
+
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url) === reportUrl)
+    ).toHaveLength(reports)
+  }
+)
 
 it("bounds refreshed image attempts while retaining the original failure as cause", async () => {
   mockRecovery(503)

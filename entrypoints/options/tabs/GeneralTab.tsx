@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import { tBrowser } from "@/src/runtime/browser-i18n"
 import { getLocaleDisplayName, t } from "@/src/runtime/i18n"
 import {
   SUPPORTED_LOCALES,
@@ -39,7 +40,7 @@ export function GeneralTab({ settings, onChange }: GeneralTabProps) {
       <SettingsGroup title={t("options_interfacePreferences")}>
         <SettingsRow
           title={t("options_uiLanguage")}
-          description={t("options_uiLanguageDesc")}
+          description={tBrowser("options_uiLanguageDesc")}
           htmlFor="ui-language"
           control={
             <Select
@@ -101,7 +102,7 @@ export function GeneralTab({ settings, onChange }: GeneralTabProps) {
       </SettingsGroup>
 
       {/* Extension Updates & Version */}
-      <ExtensionUpdateSection />
+      {!import.meta.env.FIREFOX && <ExtensionUpdateSection />}
       {/* Group 3: Debug & Diagnostics */}
       <SettingsGroup title={t("options_debugSettings")}>
         <SettingsRow

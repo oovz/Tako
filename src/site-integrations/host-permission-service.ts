@@ -3,6 +3,11 @@ import type { SiteIntegrationEnablementService } from "@/src/storage/site-integr
 import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
 import { siteIntegrationWxtPermissions } from "@/src/runtime/generated/site-integration-wxt-permissions"
 import { getDefinitions, getDefinition, isEnabled } from "./catalog"
+import {
+  MANGADEX_REPORTING_DATA_TYPE,
+  includesMangadexReportingPermission,
+  type FirefoxPermissions,
+} from "./mangadex/report-permission"
 
 export const OPTIONAL_BROAD_HTTPS_ORIGIN = "https://*/*"
 
@@ -103,12 +108,24 @@ export function includesManagedHostPermission(
   )
 }
 
+function getIntegrationPermissions(
+  integrationId: string,
+  origins: string[]
+): FirefoxPermissions {
+  if (import.meta.env.FIREFOX && integrationId === "mangadex") {
+    return { origins, data_collection: [MANGADEX_REPORTING_DATA_TYPE] }
+  }
+  return { origins }
+}
+
 export async function hasIntegrationOptionalHostPermission(
   integrationId: string
 ): Promise<boolean> {
   const origins = getIntegrationOptionalHostPermissionOrigins(integrationId)
   if (origins.length === 0) return true
-  return chrome.permissions.contains({ origins })
+  return chrome.permissions.contains(
+    getIntegrationPermissions(integrationId, origins)
+  )
 }
 
 export async function hasIntegrationHostPermission(
@@ -116,12 +133,14 @@ export async function hasIntegrationHostPermission(
 ): Promise<boolean> {
   const origins = getIntegrationHostPermissionOrigins(integrationId)
   if (origins.length === 0) return true
-  return chrome.permissions.contains({ origins })
+  return chrome.permissions.contains(
+    getIntegrationPermissions(integrationId, origins)
+  )
 }
 
 /**
  * Must be called directly from a user gesture. Callers must not await other
- * work before invoking this function or Chrome may reject the request.
+ * work before invoking this function or the browser may reject the request.
  */
 export async function requestIntegrationHostPermission(
   integrationId: string
@@ -129,7 +148,9 @@ export async function requestIntegrationHostPermission(
   const origins = getIntegrationOptionalHostPermissionOrigins(integrationId)
   if (origins.length === 0) return true
 
-  return chrome.permissions.request({ origins })
+  return chrome.permissions.request(
+    getIntegrationPermissions(integrationId, origins)
+  )
 }
 
 export async function removeUnusedHostPermissions(
@@ -140,23 +161,39 @@ export async function removeUnusedHostPermissions(
   const unusedOrigins = [...managedOrigins].filter(
     (origin) => !requiredOrigins.has(origin)
   )
-  if (unusedOrigins.length === 0) return false
+  const removeMangaDexConsent =
+    import.meta.env.FIREFOX && !isEnabled("mangadex", enablement)
+  if (unusedOrigins.length === 0 && !removeMangaDexConsent) return false
 
-  const grantedOrigins = new Set(
-    (await chrome.permissions.getAll()).origins ?? []
-  )
+  const grantedPermissions = await chrome.permissions.getAll()
+  const grantedOrigins = new Set(grantedPermissions.origins ?? [])
   // Removing an absent wildcard can revoke narrower runtime host grants.
   const removableOrigins = unusedOrigins.filter((origin) =>
     grantedOrigins.has(origin)
   )
-  if (removableOrigins.length === 0) return false
+  const revokeReporting =
+    removeMangaDexConsent &&
+    includesMangadexReportingPermission(grantedPermissions)
+  if (removableOrigins.length === 0 && !revokeReporting) return false
 
-  return chrome.permissions.remove({ origins: removableOrigins })
+  const permissions: FirefoxPermissions = {
+    origins: removableOrigins,
+    ...(revokeReporting && { data_collection: [MANGADEX_REPORTING_DATA_TYPE] }),
+  }
+  return chrome.permissions.remove(permissions)
+}
+
+async function hasOpenOptionsDocument(): Promise<boolean> {
+  const optionsUrl = chrome.runtime.getURL("options.html")
+  const tabs = await chrome.runtime.getContexts({ contextTypes: ["TAB"] })
+  return tabs.some(
+    ({ documentUrl }) => documentUrl?.split(/[?#]/, 1)[0] === optionsUrl
+  )
 }
 
 /**
- * Reconcile persisted enablement with optional host permissions. This runs
- * during background initialization and after Chrome reports a removed grant.
+ * Reconcile persisted enablement with optional permissions during background
+ * initialization and after the browser reports a removed grant.
  */
 export async function reconcileOptionalHostPermissionEnablement(
   service: Pick<SiteIntegrationEnablementService, "getAll" | "setAll">
@@ -186,17 +223,21 @@ export async function reconcileOptionalHostPermissionEnablement(
   if (disabledIntegrationIds.length > 0) {
     await service.setAll(next)
     logger.warn(
-      "Disabled site integrations whose optional host permissions are missing"
+      "Disabled site integrations whose optional permissions are missing"
     )
   }
 
   try {
-    await removeUnusedHostPermissions(
-      disabledIntegrationIds.length > 0 ? next : current
-    )
+    // An Options draft can hold new grants across a Firefox event-page wake.
+    // Options owns unused-grant cleanup while the reader is editing it.
+    if (!import.meta.env.FIREFOX || !(await hasOpenOptionsDocument())) {
+      await removeUnusedHostPermissions(
+        disabledIntegrationIds.length > 0 ? next : current
+      )
+    }
   } catch (error) {
     logger.warn(
-      "Failed to remove unused optional site integration host permissions",
+      "Failed to remove unused optional site integration permissions",
       error
     )
   }
