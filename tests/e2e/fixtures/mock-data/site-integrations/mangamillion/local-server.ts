@@ -197,11 +197,17 @@ const mangaMillionCdnHandler: MockRouteHandler = (req) => {
 }
 
 export function registerMangaMillionLocalServerHandlers(
-  server: LocalMockServerHandle
+  server: LocalMockServerHandle,
+  beforeEncryptedPage?: (path: string) => Promise<void>
 ): DnrRedirectRule[] {
   server.addRoute(MANGAMILLION_LOCAL_SITE_PREFIX, mangaMillionSiteHandler)
   server.addRoute(MANGAMILLION_LOCAL_API_PREFIX, mangaMillionApiHandler)
-  server.addRoute(MANGAMILLION_LOCAL_CDN_PREFIX, mangaMillionCdnHandler)
+  server.addRoute(MANGAMILLION_LOCAL_CDN_PREFIX, async (request) => {
+    if (request.pathnameAfterPrefix.endsWith(".enc")) {
+      await beforeEncryptedPage?.(request.pathnameAfterPrefix)
+    }
+    return mangaMillionCdnHandler(request)
+  })
 
   const base = server.url
   return [
