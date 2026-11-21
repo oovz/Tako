@@ -326,7 +326,7 @@ export function markNativeOutputAcceptanceUnknown(
 
 export function attachNativeDownload(
   state: NativeOutputState,
-  input: { outputId: string; downloadId: number }
+  input: { outputId: string; downloadId: number; scope?: "session" }
 ): NativeOutputKernelDecision<
   | NativeOutputApplied<{ record: NativeOutputRecord }>
   | NativeOutputUnchanged<{ record: NativeOutputRecord }>
@@ -336,8 +336,17 @@ export function attachNativeDownload(
 > {
   const current = state.outputsByOutputId[input.outputId]
   if (!current) return rejected(state, "output-not-found")
-  if (current.downloadId !== undefined) {
-    return current.downloadId === input.downloadId
+  const sessionScoped = input.scope === "session"
+  const attachedId = sessionScoped
+    ? current.sessionDownloadId
+    : current.downloadId
+  const incompatibleId = sessionScoped
+    ? current.downloadId
+    : current.sessionDownloadId
+  if (incompatibleId !== undefined)
+    return rejected(state, "download-id-conflict")
+  if (attachedId !== undefined) {
+    return attachedId === input.downloadId
       ? unchanged(state, { record: current })
       : rejected(state, "download-id-conflict")
   }
@@ -348,6 +357,7 @@ export function attachNativeDownload(
     return rejected(state, "invalid-transition")
   }
   if (
+    !sessionScoped &&
     Object.values(state.outputsByOutputId).some(
       (record) => record.downloadId === input.downloadId
     )
@@ -357,23 +367,38 @@ export function attachNativeDownload(
   const record: NativeOutputRecord = {
     ...current,
     phase: current.phase === "outcome_unknown" ? "outcome_unknown" : "waiting",
-    downloadId: input.downloadId,
+    ...(sessionScoped
+      ? { sessionDownloadId: input.downloadId }
+      : { downloadId: input.downloadId }),
   }
   return applied(replaceOutput(state, record), { record })
 }
 
+type NativeDownloadReference = { downloadId: number } | { outputId: string }
+
+function findNativeDownload(
+  state: NativeOutputState,
+  reference: NativeDownloadReference
+): NativeOutputRecord | undefined {
+  if ("outputId" in reference) {
+    const record = state.outputsByOutputId[reference.outputId]
+    return record?.sessionDownloadId !== undefined ? record : undefined
+  }
+  return Object.values(state.outputsByOutputId).find(
+    (record) => record.downloadId === reference.downloadId
+  )
+}
+
 export function observeNativeDownloadPending(
   state: NativeOutputState,
-  input: { downloadId: number }
+  input: NativeDownloadReference
 ): NativeOutputKernelDecision<
   | NativeOutputApplied<{ record: NativeOutputRecord }>
   | NativeOutputUnchanged<{ record: NativeOutputRecord }>
   | NativeOutputRejected<"download-not-found">
   | InvalidTransition
 > {
-  const current = Object.values(state.outputsByOutputId).find(
-    (record) => record.downloadId === input.downloadId
-  )
+  const current = findNativeDownload(state, input)
   if (!current) return rejected(state, "download-not-found")
   if (current.phase === "waiting") return unchanged(state, { record: current })
   if (
@@ -412,7 +437,7 @@ export function markNativeOutputOutcomeUnknown(
   const record: NativeOutputRecord = {
     ...current,
     phase: "outcome_unknown",
-    error: "Chrome file-save outcome could not be established",
+    error: "Browser file-save outcome could not be established",
   }
   return applied(replaceOutput(state, record), { record })
 }
@@ -445,8 +470,7 @@ export function interruptNativeOutputBeforeAcceptance(
 
 export function markNativeDownloadTerminal(
   state: NativeOutputState,
-  input: {
-    downloadId: number
+  input: NativeDownloadReference & {
     phase: "complete" | "interrupted"
     now: number
     error?: string
@@ -457,9 +481,7 @@ export function markNativeDownloadTerminal(
   | NativeOutputRejected<"download-not-found" | "terminal-conflict">
   | InvalidTransition
 > {
-  const current = Object.values(state.outputsByOutputId).find(
-    (record) => record.downloadId === input.downloadId
-  )
+  const current = findNativeDownload(state, input)
   if (!current) return rejected(state, "download-not-found")
   if (isNativeOutputTerminal(current)) {
     return current.phase === input.phase
@@ -544,7 +566,7 @@ export function markNativeOutputAccountingDisposition(
 
 export function markNativeOutputBlobReleased(
   state: NativeOutputState,
-  input: { outputId: string; now: number }
+  input: { outputId: string; now: number; producerDocumentGone?: true }
 ): NativeOutputKernelDecision<
   | NativeOutputApplied<{ record: NativeOutputRecord }>
   | NativeOutputUnchanged<{ record: NativeOutputRecord }>
@@ -556,10 +578,16 @@ export function markNativeOutputBlobReleased(
   if (current.blobReleasedAt !== undefined) {
     return unchanged(state, { record: current })
   }
-  if (!canReleaseNativeOutputBlob(current)) {
+  const releasedByProducerLoss =
+    input.producerDocumentGone === true && current.phase === "outcome_unknown"
+  if (!canReleaseNativeOutputBlob(current) && !releasedByProducerLoss) {
     return rejected(state, "invalid-transition")
   }
-  const record = { ...current, blobReleasedAt: input.now }
+  const record: NativeOutputRecord = {
+    ...current,
+    ...(releasedByProducerLoss ? { producerDocumentGone: true } : {}),
+    blobReleasedAt: input.now,
+  }
   return applied(replaceOutput(state, record), { record })
 }
 

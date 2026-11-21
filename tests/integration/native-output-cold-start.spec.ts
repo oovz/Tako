@@ -1,12 +1,21 @@
 import { HistoryRepository } from "@/src/storage/history-repository"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   NativeOutputCoordinator,
   type NativeOutputCoordinatorDependencies,
 } from "@/entrypoints/background/native-output-coordinator"
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
+import { isBlobProducerAbsent } from "@/entrypoints/background/native-output-blob-revocation"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
+import {
+  hasOffscreenDocument,
+  scheduleOffscreenCloseIfIdle,
+} from "@/entrypoints/background/offscreen-lifecycle"
+import {
+  closeProcessingDocument,
+  createProcessingDocument,
+} from "@/entrypoints/background/processing-document"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import type { DownloadTaskExecutor } from "@/entrypoints/background/download-task-executor"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
@@ -155,6 +164,8 @@ describe("native output cold-start recovery", () => {
     } as Awaited<ReturnType<typeof settingsRepository.getSettings>>)
   })
 
+  afterEach(() => vi.unstubAllEnvs())
+
   function createRuntime(
     queryOffscreenJob: NativeOutputCoordinatorDependencies["queryOffscreenJob"] = async (
       identity
@@ -177,6 +188,9 @@ describe("native output cold-start recovery", () => {
       queryOffscreenJob,
       requestBlobRevocation:
         revoke as NativeOutputCoordinatorDependencies["requestBlobRevocation"],
+      isBlobProducerAbsent: import.meta.env.FIREFOX
+        ? isBlobProducerAbsent
+        : undefined,
       ensureLivenessAlarm: vi.fn(async () => undefined),
     })
     return { queueRepository, repository, coordinator }
@@ -187,6 +201,16 @@ describe("native output cold-start recovery", () => {
       settingsRepository,
       historyRepository: {} as never,
     }
+  }
+
+  function observeDownloads(...items: chrome.downloads.DownloadItem[]) {
+    search.mockImplementation(
+      async ({ id, url }: chrome.downloads.DownloadQuery) =>
+        items.filter(
+          (item) =>
+            (id ?? item.id) === item.id && (url ?? item.url) === item.url
+        )
+    )
   }
 
   it.each([0, 1, 2])(
@@ -685,6 +709,220 @@ describe("native output cold-start recovery", () => {
       expect(revoke).not.toHaveBeenCalled()
     }
   )
+
+  it("recovers a Firefox transfer by source when the original download ID is reused", async () => {
+    vi.stubEnv("FIREFOX", "true")
+    const pending = createRuntime()
+    await pending.queueRepository.initialize()
+    await pending.coordinator.initialize()
+    await pending.coordinator.handleOutputReady(output)
+    await pending.coordinator.sealManifest({
+      ...jobIdentity,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+    })
+    await pending.queueRepository.clearDispatchLease(jobIdentity)
+
+    const unrelated = {
+      ...completeDownloadItem(),
+      url: "https://example.com/other.zip",
+    }
+    observeDownloads(unrelated)
+    await expect(
+      pending.coordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).resolves.toMatchObject({ handled: false })
+    await expect(
+      pending.coordinator.handleDownloadErased(42)
+    ).resolves.toMatchObject({ handled: false })
+    expect(revoke).not.toHaveBeenCalled()
+    expect(await pending.queueRepository.getTask(output.taskId)).toMatchObject({
+      status: "downloading",
+    })
+
+    const saved = { ...completeDownloadItem(), id: 71 }
+    observeDownloads(unrelated, saved)
+    const restarted = createRuntime()
+    await restarted.queueRepository.initialize()
+    await restarted.coordinator.initialize()
+    expect(
+      await restarted.queueRepository.getTask(output.taskId)
+    ).toMatchObject({
+      status: "completed",
+      chapters: [
+        {
+          status: "completed",
+          outputs: { requested: 1, committed: 1, failed: 0 },
+        },
+      ],
+    })
+    expect(
+      (await restarted.queueRepository.getTask(output.taskId))
+        ?.lastSuccessfulDownloadId
+    ).toBeUndefined()
+    expect(download).toHaveBeenCalledOnce()
+  })
+
+  it.each(["absent", "replaced", "current"] as const)(
+    "keeps unconfirmed accounting and holds a Firefox frame only while the producer is still current (%s)",
+    async (producer) => {
+      vi.stubEnv("FIREFOX", "true")
+      let documentInstanceId = jobIdentity.documentInstanceId
+      vi.stubGlobal("document", {
+        createElement: () =>
+          Object.assign(new EventTarget(), { remove: () => undefined }),
+        documentElement: {
+          append: (frame: EventTarget) =>
+            frame.dispatchEvent(new Event("load")),
+        },
+      })
+      Object.assign(chrome.runtime, {
+        getURL: (path: string) => `moz-extension://profile-id/${path}`,
+        getDocumentId: () => documentInstanceId,
+        sendMessage: async ({ type }: { type: string }) =>
+          type === "OFFSCREEN_STATUS"
+            ? {
+                success: true,
+                initializationState: "ready",
+                documentInstanceId,
+                activeJobCount: 0,
+                activeTransientWorkCount: 0,
+                activeTaskIds: [],
+              }
+            : { success: true },
+      })
+      try {
+        await createProcessingDocument("liveness")
+        const pending = createRuntime()
+        await pending.queueRepository.initialize()
+        await pending.coordinator.initialize()
+        await pending.coordinator.handleOutputReady(output)
+        await pending.coordinator.sealManifest({
+          ...jobIdentity,
+          outputsRequested: 1,
+          outputsFailedBeforeHandoff: 0,
+        })
+        await pending.queueRepository.clearDispatchLease(jobIdentity)
+
+        if (producer !== "current") {
+          await closeProcessingDocument()
+          documentInstanceId = "replacement-document"
+        }
+        if (producer === "replaced") await createProcessingDocument("liveness")
+
+        const restarted = createRuntime()
+        await restarted.queueRepository.initialize()
+        const effects = await restarted.coordinator.initialize()
+        for (const effect of effects)
+          await restarted.coordinator.acknowledgeSettlement(effect)
+        expect(
+          await restarted.queueRepository.getTask(output.taskId)
+        ).toMatchObject({
+          status: "failed",
+          errorCategory: "browser_output_unconfirmed",
+          chapters: [{ outputs: { requested: 1, committed: 0, failed: 1 } }],
+        })
+
+        if (producer === "absent") await createProcessingDocument("liveness")
+        await scheduleOffscreenCloseIfIdle(
+          restarted.queueRepository,
+          restarted.coordinator
+        )
+        expect(await hasOffscreenDocument()).toBe(producer === "current")
+        expect(revoke).not.toHaveBeenCalled()
+        expect(download).toHaveBeenCalledOnce()
+      } finally {
+        await closeProcessingDocument()
+        vi.unstubAllGlobals()
+      }
+    }
+  )
+
+  it("saves a new Firefox output when its ID belongs to an unconfirmed older handoff", async () => {
+    vi.stubEnv("FIREFOX", "true")
+    const pending = createRuntime()
+    await pending.queueRepository.initialize()
+    await pending.coordinator.initialize()
+    await pending.coordinator.handleOutputReady(output)
+    await pending.coordinator.sealManifest({
+      ...jobIdentity,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+    })
+    await pending.queueRepository.clearDispatchLease(jobIdentity)
+
+    const restarted = createRuntime()
+    await restarted.queueRepository.initialize()
+    await restarted.coordinator.initialize()
+    const unconfirmed = await restarted.queueRepository.getTask(output.taskId)
+    expect(unconfirmed).toMatchObject({
+      status: "failed",
+      errorCategory: "browser_output_unconfirmed",
+    })
+
+    const next = {
+      ...output,
+      taskId: "next-task",
+      jobId: "next-job",
+      outputId: "next-output",
+      fileUrl: "blob:next-output",
+    }
+    const task = activeTask()
+    await restarted.queueRepository.enqueueDownloadTask({
+      ...task,
+      id: next.taskId,
+      status: "queued",
+      started: undefined,
+      chapters: [
+        { ...task.chapters[0], status: "queued", dispatchAttempt: undefined },
+      ],
+    })
+    const now = Date.now()
+    await restarted.queueRepository.startDownloadTask({
+      taskId: next.taskId,
+      now,
+    })
+    await expect(
+      restarted.queueRepository.beginChapterDispatch({
+        taskId: next.taskId,
+        chapterId: next.chapterId,
+        lease: {
+          ...createDispatchLease({ ...next, saveMode: "downloads-api", now }),
+          documentInstanceId: next.documentInstanceId,
+        },
+        expectedPreviousLease: null,
+        now,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      restarted.coordinator.handleOutputReady(next)
+    ).resolves.toMatchObject({
+      response: { phase: "waiting" },
+    })
+    await restarted.coordinator.sealManifest({
+      ...next,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+    })
+    await restarted.queueRepository.clearDispatchLease(next)
+    observeDownloads({ ...completeDownloadItem(), url: next.fileUrl })
+    await expect(
+      restarted.coordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).resolves.toMatchObject({ handled: true })
+    expect(await restarted.queueRepository.getTask(next.taskId)).toMatchObject({
+      status: "completed",
+      chapters: [{ status: "completed" }],
+    })
+    expect(await restarted.queueRepository.getTask(output.taskId)).toEqual(
+      unconfirmed
+    )
+    expect(download).toHaveBeenCalledTimes(2)
+  })
 
   it("adopts a lost Chrome ID after restart without issuing a second download", async () => {
     const first = createRuntime()

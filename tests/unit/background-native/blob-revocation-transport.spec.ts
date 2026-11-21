@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { requestBlobRevocation } from "@/entrypoints/background/native-output-blob-revocation"
 import type { NativeOutputRecord } from "@/src/domain/native-output/state"
@@ -29,6 +29,18 @@ describe("native output Blob revocation transport", () => {
   beforeEach(() => {
     sendMessage.mockReset()
     vi.stubGlobal("chrome", { runtime: { sendMessage } })
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it("releases an old Firefox Blob dependency after its processing document is gone", async () => {
+    vi.stubEnv("FIREFOX", "true")
+    sendMessage.mockRejectedValue(
+      new Error("Offscreen receiving end is unavailable")
+    )
+
+    await expect(requestBlobRevocation(record)).resolves.toBeUndefined()
+    expect(sendMessage).not.toHaveBeenCalled()
   })
 
   it("resolves after offscreen confirms revocation for the exact output incarnation", async () => {

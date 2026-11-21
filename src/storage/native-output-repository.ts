@@ -250,12 +250,14 @@ const outputRecordInputSchema = z.strictObject({
   createdAt: nonnegativeFiniteNumber,
   acceptanceStartedAt: nonnegativeFiniteNumber.optional(),
   downloadId: nonnegativeInteger.optional(),
+  sessionDownloadId: nonnegativeInteger.optional(),
   terminalAt: nonnegativeFiniteNumber.optional(),
   error: z.string().optional(),
   erasedAt: nonnegativeFiniteNumber.optional(),
   erasedByBrowserAt: nonnegativeFiniteNumber.optional(),
   accountingDisposition: z.enum(["pending", "accounted", "not_owner"]),
   accountingDispositionAt: nonnegativeFiniteNumber.optional(),
+  producerDocumentGone: z.literal(true).optional(),
   blobReleasedAt: nonnegativeFiniteNumber.optional(),
   dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
 })
@@ -280,9 +282,9 @@ function validateOutputRecord(
   validateOutputTerminalTime(record, context)
   validateOutputErasure(record, context)
   validateOutputAccounting(record, context)
-  const hasConsumptionEvidence = hasRecordedBlobConsumption(record)
-  validateOutputBlobRelease(record, hasConsumptionEvidence, context)
-  validateOutputDependencyRelease(record, hasConsumptionEvidence, context)
+  const hasLifetimeEvidence = hasRecordedBlobLifetimeEnd(record)
+  validateOutputBlobRelease(record, hasLifetimeEvidence, context)
+  validateOutputDependencyRelease(record, hasLifetimeEvidence, context)
 }
 
 function requiresNativeAcceptance(record: ParsedOutputRecord): boolean {
@@ -312,7 +314,9 @@ function validateOutputAcceptance(
   }
   if (
     (record.phase === "prepared" || record.phase === "acceptance_unknown") &&
-    (record.downloadId !== undefined || record.terminalAt !== undefined)
+    (record.downloadId !== undefined ||
+      record.sessionDownloadId !== undefined ||
+      record.terminalAt !== undefined)
   ) {
     reportInvalidNativeOutput(
       context,
@@ -328,12 +332,23 @@ function validateOutputHandoff(
 ): void {
   if (
     (record.phase === "waiting" || record.phase === "complete") &&
-    record.downloadId === undefined
+    record.downloadId === undefined &&
+    record.sessionDownloadId === undefined
   ) {
     reportInvalidNativeOutput(
       context,
       ["downloadId"],
       "accepted output phase requires downloadId"
+    )
+  }
+  if (
+    record.downloadId !== undefined &&
+    record.sessionDownloadId !== undefined
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["sessionDownloadId"],
+      "persistent and session download IDs are mutually exclusive"
     )
   }
   if (
@@ -414,7 +429,7 @@ function validateOutputAccounting(
   }
 }
 
-function hasRecordedBlobConsumption(record: ParsedOutputRecord): boolean {
+function hasRecordedBlobLifetimeEnd(record: ParsedOutputRecord): boolean {
   return (
     canReleaseNativeOutputBlob(record) ||
     ((record.phase === "waiting" || record.phase === "outcome_unknown") &&
@@ -424,29 +439,40 @@ function hasRecordedBlobConsumption(record: ParsedOutputRecord): boolean {
 
 function validateOutputBlobRelease(
   record: ParsedOutputRecord,
-  hasConsumptionEvidence: boolean,
+  hasLifetimeEvidence: boolean,
   context: z.RefinementCtx
 ): void {
   if (
+    record.producerDocumentGone &&
+    (record.blobReleasedAt === undefined ||
+      (record.phase !== "outcome_unknown" && !isNativeOutputTerminal(record)))
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["producerDocumentGone"],
+      "producer destruction releases the Blob of an unconfirmed or terminal output"
+    )
+  }
+  if (
     record.blobReleasedAt !== undefined &&
-    (record.blobReleasedAt < record.createdAt || !hasConsumptionEvidence)
+    (record.blobReleasedAt < record.createdAt || !hasLifetimeEvidence)
   ) {
     reportInvalidNativeOutput(
       context,
       ["blobReleasedAt"],
-      "Blob release requires browser consumption evidence after preparation"
+      "Blob release requires lifetime evidence after preparation"
     )
   }
 }
 
 function validateOutputDependencyRelease(
   record: ParsedOutputRecord,
-  hasConsumptionEvidence: boolean,
+  hasLifetimeEvidence: boolean,
   context: z.RefinementCtx
 ): void {
   if (
     record.dependencyReleasedAt !== undefined &&
-    (!hasConsumptionEvidence ||
+    (!hasLifetimeEvidence ||
       record.accountingDisposition === "pending" ||
       record.blobReleasedAt === undefined ||
       record.dependencyReleasedAt < record.blobReleasedAt)

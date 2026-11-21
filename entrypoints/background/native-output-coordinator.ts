@@ -59,6 +59,7 @@ export interface NativeOutputCoordinatorDependencies {
       | "blobUrl"
     >
   ) => Promise<void>
+  isBlobProducerAbsent?: (documentInstanceId: string) => Promise<boolean>
   ensureLivenessAlarm: () => Promise<void>
 }
 
@@ -71,6 +72,14 @@ export interface NativeOutputSettlementEffect {
 
 export type NativeOutputSettlementEffects =
   readonly NativeOutputSettlementEffect[]
+
+function needsDownloadObservation(record: NativeOutputRecord): boolean {
+  return (
+    record.phase === "waiting" ||
+    record.phase === "acceptance_unknown" ||
+    record.phase === "outcome_unknown"
+  )
+}
 
 function addSettlementEffect(
   effects: NativeOutputSettlementEffect[],
@@ -137,7 +146,7 @@ function accountingDisposition(
 }
 
 /**
- * Sole owner of native Chrome Downloads state and its durable reconciliation.
+ * Sole owner of browser download state and its durable reconciliation.
  * Every public command is serialized so API acceptance, event observation,
  * queue settlement, and Blob release cannot interleave stale snapshots.
  */
@@ -304,7 +313,7 @@ export class NativeOutputCoordinator {
     await this.armLivenessLocked()
   }
 
-  private async startChromeDownloadLocked(
+  private async startBrowserDownloadLocked(
     record: NativeOutputRecord
   ): Promise<number> {
     const settings = await this.deps.settingsRepository.getSettings()
@@ -321,7 +330,9 @@ export class NativeOutputCoordinator {
       url: record.blobUrl,
       filename: record.filename,
       conflictAction: task.settingsSnapshot.conflictPolicy,
-      saveAs: settings.downloads.suppressSaveAsDialog === false,
+      saveAs:
+        !import.meta.env.FIREFOX &&
+        settings.downloads.suppressSaveAsDialog === false,
     })
     if (!isValidDownloadId(downloadId)) {
       throw new Error("downloads.download returned no download id")
@@ -359,7 +370,7 @@ export class NativeOutputCoordinator {
   ): Promise<NativeOutputRecord> {
     let acceptedId: number
     try {
-      acceptedId = await this.startChromeDownloadLocked(record)
+      acceptedId = await this.startBrowserDownloadLocked(record)
     } catch (error) {
       const interrupted = await this.interruptRejectedOutputLocked(
         record,
@@ -372,6 +383,7 @@ export class NativeOutputCoordinator {
       const attached = await this.deps.repository.attachDownload({
         outputId: record.outputId,
         downloadId: acceptedId,
+        ...(import.meta.env.FIREFOX ? { scope: "session" } : {}),
       })
       if (attached.outcome !== "rejected") record = attached.record
     } catch (error) {
@@ -428,6 +440,9 @@ export class NativeOutputCoordinator {
       if (phase !== "complete" && phase !== "interrupted") {
         return { handled: false, effects }
       }
+      if (import.meta.env.FIREFOX) {
+        return await this.handleFirefoxDownloadChangedLocked(delta.id)
+      }
       const current = await this.deps.repository.getByDownloadId(delta.id)
       if (!current) return { handled: false, effects }
       const terminal = await this.deps.repository.markTerminal({
@@ -447,10 +462,36 @@ export class NativeOutputCoordinator {
     })
   }
 
+  private async handleFirefoxDownloadChangedLocked(
+    downloadId: number
+  ): Promise<{
+    handled: boolean
+    effects: NativeOutputSettlementEffects
+  }> {
+    const snapshot = await this.deps.repository.snapshot()
+    const candidates = Object.values(snapshot.outputsByOutputId).filter(
+      needsDownloadObservation
+    )
+    if (candidates.length === 0) return { handled: false, effects: [] }
+    // Firefox can reuse numeric IDs after a browser restart. Resolve the
+    // event's current source before identifying a durable output record.
+    const items = await chrome.downloads.search({ id: downloadId })
+    const item = items.find((candidate) => candidate.id === downloadId)
+    const record =
+      item && candidates.find((candidate) => candidate.blobUrl === item.url)
+    if (!record) return { handled: false, effects: [] }
+    return {
+      handled: true,
+      effects: await this.observeFirefoxDownloadLocked(record),
+    }
+  }
+
   async handleDownloadErased(downloadId: number): Promise<{
     handled: boolean
     effects: NativeOutputSettlementEffects
   }> {
+    // Firefox removes history entries independently of the underlying transfer.
+    if (import.meta.env.FIREFOX) return { handled: false, effects: [] }
     return await this.serialized(async () => {
       const effects: NativeOutputSettlementEffect[] = []
       const current = await this.deps.repository.getByDownloadId(downloadId)
@@ -771,6 +812,11 @@ export class NativeOutputCoordinator {
   ): Promise<NativeOutputSettlementEffects> {
     const current = await this.deps.repository.getByOutputId(record.outputId)
     if (!current) return []
+    if (import.meta.env.FIREFOX) {
+      return needsDownloadObservation(current)
+        ? await this.observeFirefoxDownloadLocked(current)
+        : []
+    }
     if (
       current.phase === "acceptance_unknown" ||
       (current.phase === "outcome_unknown" && current.downloadId === undefined)
@@ -794,7 +840,7 @@ export class NativeOutputCoordinator {
     try {
       return await chrome.downloads.search(query)
     } catch (error) {
-      logger.warn(`Chrome ${evidence} evidence is unavailable`, {
+      logger.warn(`Browser download ${evidence} evidence is unavailable`, {
         outputId: record.outputId,
         error,
       })
@@ -842,6 +888,38 @@ export class NativeOutputCoordinator {
     return await this.observeDownloadItemLocked(attached.record, candidate)
   }
 
+  private async observeFirefoxDownloadLocked(
+    record: NativeOutputRecord
+  ): Promise<NativeOutputSettlementEffects> {
+    const matches = await this.searchOutputEvidenceLocked(
+      record,
+      { url: record.blobUrl },
+      "file-save"
+    )
+    if (!matches) return []
+    const exact = matches.filter(
+      (item) => isValidDownloadId(item.id) && item.url === record.blobUrl
+    )
+    if (exact.length !== 1) {
+      await this.deps.repository.markOutcomeUnknown({
+        outputId: record.outputId,
+      })
+      await this.armLivenessLocked()
+      return []
+    }
+    const item = exact[0]
+    if (record.sessionDownloadId === undefined) {
+      const attached = await this.deps.repository.attachDownload({
+        outputId: record.outputId,
+        downloadId: item.id,
+        scope: "session",
+      })
+      if (attached.outcome === "rejected") return []
+      record = attached.record
+    }
+    return await this.observeDownloadItemLocked(record, item)
+  }
+
   private async observeKnownDownloadLocked(
     record: NativeOutputRecord,
     downloadId: number
@@ -885,7 +963,11 @@ export class NativeOutputCoordinator {
         chapter.nativeOutputSettlement
       )
     ) {
-      await this.deps.repository.observePending({ downloadId })
+      await this.deps.repository.observePending(
+        record.sessionDownloadId === undefined
+          ? { downloadId }
+          : { outputId: record.outputId }
+      )
     }
   }
 
@@ -903,10 +985,12 @@ export class NativeOutputCoordinator {
     }
     if (item.state !== "complete" && item.state !== "interrupted") return []
     await this.deps.repository.markTerminal({
-      downloadId: item.id,
+      ...(record.sessionDownloadId === undefined
+        ? { downloadId: item.id }
+        : { outputId: record.outputId }),
       phase: item.state,
       now: Date.now(),
-      error: item.error,
+      error: item.error ?? undefined,
     })
     return await this.reconcileJobLocked(record.jobId)
   }
@@ -1081,16 +1165,19 @@ export class NativeOutputCoordinator {
     records: NativeOutputRecord[]
   ): Promise<void> {
     for (const record of records) {
-      if (
-        record.blobReleasedAt !== undefined ||
-        !canReleaseNativeOutputBlob(record)
-      )
-        continue
+      if (record.blobReleasedAt !== undefined) continue
       try {
-        await this.deps.requestBlobRevocation(record)
+        const canRevoke = canReleaseNativeOutputBlob(record)
+        const producerDocumentGone =
+          !canRevoke &&
+          record.phase === "outcome_unknown" &&
+          (await this.deps.isBlobProducerAbsent?.(record.documentInstanceId))
+        if (!canRevoke && !producerDocumentGone) continue
+        if (canRevoke) await this.deps.requestBlobRevocation(record)
         const released = await this.deps.repository.markBlobReleased({
           outputId: record.outputId,
           now: Date.now(),
+          ...(producerDocumentGone ? { producerDocumentGone: true } : {}),
         })
         if (released.outcome === "rejected") {
           throw new Error(

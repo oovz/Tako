@@ -58,6 +58,8 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   createdAt: number
   acceptanceStartedAt?: number
   downloadId?: number
+  /** Handoff evidence for browsers whose IDs can be reused after restart. */
+  sessionDownloadId?: number
   terminalAt?: number
   error?: string
   erasedAt?: number
@@ -65,6 +67,8 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   erasedByBrowserAt?: number
   accountingDisposition: NativeOutputAccountingDisposition
   accountingDispositionAt?: number
+  /** Destruction of the exact document also destroys its Blob URL. */
+  producerDocumentGone?: true
   blobReleasedAt?: number
   dependencyReleasedAt?: number
 }
@@ -118,11 +122,13 @@ export function canAccountNativeOutput(record: NativeOutputRecord): boolean {
   return record.phase === "outcome_unknown" || isNativeOutputTerminal(record)
 }
 
-/** Browser consumption determines Blob lifetime independently of accounting. */
+/** Browser consumption or producer destruction ends Blob lifetime. */
 export function canReleaseNativeOutputBlob(
   record: NativeOutputRecord
 ): boolean {
   return (
-    isNativeOutputTerminal(record) || record.erasedByBrowserAt !== undefined
+    isNativeOutputTerminal(record) ||
+    record.erasedByBrowserAt !== undefined ||
+    record.producerDocumentGone === true
   )
 }

@@ -31,6 +31,11 @@ import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-ta
 import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import {
+  closeProcessingDocument,
+  createProcessingDocument,
+  firefoxProcessingContexts,
+} from "./processing-document"
+import {
   isExecutingDownloadTask,
   isWatchdogEligibleTask,
 } from "@/src/domain/queue/task-lifecycle"
@@ -68,6 +73,7 @@ function releaseAllTransientWorkReservations(): void {
 }
 
 export async function getOffscreenContexts(): Promise<unknown[]> {
+  if (import.meta.env.FIREFOX) return firefoxProcessingContexts()
   const offscreenUrl = chrome.runtime.getURL("offscreen.html")
   const runtimeWithGetContexts = chrome.runtime as unknown as {
     getContexts?: RuntimeGetContexts
@@ -82,6 +88,7 @@ export async function getOffscreenContexts(): Promise<unknown[]> {
 }
 
 export async function hasOffscreenDocument(): Promise<boolean> {
+  if (import.meta.env.FIREFOX) return firefoxProcessingContexts().length > 0
   return await chrome.offscreen.hasDocument()
 }
 
@@ -111,12 +118,12 @@ async function tryFlushOffscreenDiagnostics(
 
 export async function terminateOffscreenDocumentForUnboundLease(): Promise<void> {
   await runOffscreenLifecycleOperation(async () => {
-    if (!(await chrome.offscreen.hasDocument())) {
+    if (!(await hasOffscreenDocument())) {
       releaseAllTransientWorkReservations()
       return
     }
     await tryFlushOffscreenDiagnostics()
-    await chrome.offscreen.closeDocument()
+    await closeProcessingDocument()
     releaseAllTransientWorkReservations()
   })
 }
@@ -157,7 +164,7 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
   await tryFlushOffscreenDiagnostics(input.documentInstanceId)
   if (!(await browserDocumentIsCurrent(contexts, observedBrowserId)))
     return "stale"
-  await chrome.offscreen.closeDocument()
+  await closeProcessingDocument()
   releaseAllTransientWorkReservations()
   return "closed"
 }
@@ -178,7 +185,7 @@ export async function ensureLivenessAlarm(): Promise<void> {
   if (existing) await chrome.alarms.clear(LIVENESS_ALARM_NAME)
   await chrome.alarms.create(LIVENESS_ALARM_NAME, {
     delayInMinutes: 0.5,
-    persistAcrossSessions: true,
+    ...(!import.meta.env.FIREFOX && { persistAcrossSessions: true }),
   })
 }
 
@@ -700,16 +707,7 @@ async function ensureOffscreenDocumentAdmission(): Promise<void> {
   }
 
   releaseAllTransientWorkReservations()
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: [
-      chrome.offscreen.Reason.BLOBS,
-      chrome.offscreen.Reason.WORKERS,
-      chrome.offscreen.Reason.DOM_PARSER,
-    ],
-    justification:
-      "Create archives in a Web Worker (fflate), handle Blob-based downloads, and parse fetched series page HTML with DOMParser when no content script is available",
-  })
+  await createProcessingDocument(LIVENESS_ALARM_NAME)
   logger.info("Offscreen document created")
 }
 
@@ -832,7 +830,7 @@ async function closeIdleOffscreenDocument(
     current.documentInstanceId !== candidate.documentInstanceId
   )
     return
-  await chrome.offscreen.closeDocument()
+  await closeProcessingDocument()
   logger.info("Offscreen document closed due to inactivity")
 }
 
