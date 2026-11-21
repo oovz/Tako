@@ -2,7 +2,7 @@ import type { SiteIntegrationPageProbe } from "@/src/site-integrations/page-prob
 import { z } from "zod"
 import { ManhuaguiPageProbeDataSchema } from "./contracts/page-probe"
 
-/** This function is serialized by chrome.scripting.executeScript. */
+/** The browser serializes this function for one-shot injection. */
 function collectManhuaguiPageProbe(): unknown {
   const result: { url: string; data?: unknown } = {
     url: globalThis.location.href,

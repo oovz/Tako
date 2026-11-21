@@ -49,6 +49,10 @@ pnpm test:unit
 
 ## 可选能力
 
+### 浏览器 API
+
+网络请求使用站点集成的辅助函数，页面探针和会话规则在 `definition.json` 中声明。使用通用 WebExtension API 时，从 `wxt/browser` 导入 `browser`。在受支持的 Chrome 和 Firefox 版本中确认 API 所需的权限、可用的执行环境和返回值。浏览器专用 API 由对应功能的代码调用，调用前检查构建目标或 API 是否可用。
+
 ### 一次性页面探针
 
 需要实时页面状态时，声明 `pageProbe: "optional"` 或 `"required"`，并提供 `probe.ts`。使用读取范围受限的只读探针，返回经过验证的普通数据，并在完成后释放资源。默认使用隔离环境。

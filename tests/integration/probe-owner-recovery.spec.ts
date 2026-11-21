@@ -11,6 +11,15 @@ vi.mock("@/src/runtime/logger", () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
+// Each fixture installs its own extension API after the runtime is imported.
+vi.mock("wxt/browser", () => ({
+  browser: {
+    get scripting() {
+      return globalThis.chrome.scripting
+    },
+  },
+}))
+
 const seriesId = "10aef6a5-5699-4426-bfce-d31d0304b2c3"
 const sourceUrl = `https://mangadex.org/title/${seriesId}`
 const preferences = { dataSaver: false, filteredLanguages: ["ja"] }

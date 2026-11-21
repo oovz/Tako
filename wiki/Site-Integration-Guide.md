@@ -51,6 +51,10 @@ Update [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting)
 
 ## Optional capabilities
 
+### Browser APIs
+
+Use the integration helpers for network requests and declare page probes and session rules in `definition.json`. For a shared WebExtension API, import `browser` from `wxt/browser`. Check the API’s permissions, execution contexts, and results on the supported Chrome and Firefox versions. Keep a browser-specific call in the code that owns that capability and guard it by build target or API availability.
+
 ### One-shot page probes
 
 If live page state is necessary, declare `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Use bounded read-only probes that return validated plain data and release their resources when finished. Use the isolated world by default.

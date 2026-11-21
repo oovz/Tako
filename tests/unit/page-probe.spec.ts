@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const executeScript = vi.hoisted(() => vi.fn())
+
+vi.mock("wxt/browser", () => ({
+  browser: { scripting: { executeScript } },
+}))
+
 const probes = vi.hoisted(() => ({
   mangadex: {
     collect: () => ({ url: globalThis.location.href }),
-    parse: (raw: unknown) => raw as { url: string; data?: unknown },
+    parse: vi.fn((raw: unknown) => raw as { url: string; data?: unknown }),
   },
 }))
 
@@ -16,11 +22,8 @@ import { pageProbe as mangadexPageProbe } from "@/src/site-integrations/mangadex
 import { pageProbe as manhuaguiPageProbe } from "@/src/site-integrations/readmanga/probe"
 
 describe("approved one-shot page probe", () => {
-  const executeScript = vi.fn()
-
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal("chrome", { scripting: { executeScript } })
   })
 
   it("looks up a provider probe and injects only its self-contained collector", async () => {
@@ -37,6 +40,22 @@ describe("approved one-shot page probe", () => {
       injectImmediately: true,
       func: probes.mangadex.collect,
     })
+  })
+
+  it.each([
+    { result: [], name: "no injected frame" },
+    { result: [{ frameId: 0 }], name: "no result from the top frame" },
+    {
+      result: [{ frameId: 0, error: new Error("Page execution failed") }],
+      name: "Firefox reports an injection error",
+    },
+  ])("rejects missing page data when $name", async ({ result }) => {
+    executeScript.mockResolvedValue(result)
+
+    await expect(executeApprovedPageProbe(12, "mangadex")).rejects.toThrow(
+      "The top-frame page probe returned no result"
+    )
+    expect(probes.mangadex.parse).not.toHaveBeenCalled()
   })
 
   it("rejects an unknown provider probe instead of executing page code", async () => {

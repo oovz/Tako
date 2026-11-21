@@ -5,7 +5,7 @@ import {
   type MangadexPageProbeData,
 } from "./contracts/page-probe"
 
-/** This function is serialized by chrome.scripting.executeScript. */
+/** The browser serializes this function for one-shot injection. */
 function collectMangadexPageProbe(): unknown {
   function isRecord(value: unknown): value is Record<string, unknown> {
     return Object.prototype.toString.call(value) === "[object Object]"

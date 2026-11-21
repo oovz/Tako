@@ -49,6 +49,10 @@ pnpm test:unit
 
 ## 選用能力
 
+### 瀏覽器 API
+
+網路請求使用網站整合的輔助函式，頁面探針和工作階段規則在 `definition.json` 中宣告。使用通用的 WebExtension API 時，從 `wxt/browser` 匯入 `browser`。在支援的 Chrome 和 Firefox 版本中確認 API 所需的權限、可用的執行環境和回傳值。瀏覽器專用 API 由對應功能的程式碼呼叫，呼叫前先檢查建置目標或 API 是否可用。
+
 ### 單次頁面探測
 
 需要即時頁面狀態時，宣告 `pageProbe: "optional"` 或 `"required"`，並提供 `probe.ts`。使用受限的唯讀探測，回傳通過驗證的純資料，完成後釋放資源。預設使用隔離執行環境。

@@ -1,9 +1,9 @@
 /** Page-probe contracts shared by providers and the generated registry. */
 
 /**
- * A provider-owned page probe. `collect` is serialized by Chrome
- * and therefore must be self-contained: it may only use globals available in
- * the page's isolated world. Parsing always runs in the service worker.
+ * A provider-owned page probe. The browser serializes `collect` for the page’s
+ * isolated world. It must be self-contained and return JSON-serializable data.
+ * Parsing runs in the extension background.
  */
 export interface SiteIntegrationPageProbe {
   collect: () => unknown
