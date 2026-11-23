@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  OptionsHistorySeriesSchema,
   runtimeMessageRegistry,
   runtimePortRegistry,
 } from "@/src/runtime/runtime-message-contracts"
@@ -276,6 +277,24 @@ describe("runtime message registry", () => {
         },
       }).success
     ).toBe(false)
+  })
+
+  it("requires a nonempty title in Options history summaries", () => {
+    const summary = {
+      siteIntegrationId: "mangadex",
+      seriesId: "series-1",
+      chapterCount: 1,
+    }
+    expect(
+      OptionsHistorySeriesSchema.safeParse({ ...summary, seriesTitle: "" })
+        .success
+    ).toBe(false)
+    expect(
+      OptionsHistorySeriesSchema.safeParse({
+        ...summary,
+        seriesTitle: "Series",
+      }).success
+    ).toBe(true)
   })
 
   it("exposes strict UI preferences without the durable settings document", () => {

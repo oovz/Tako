@@ -186,7 +186,7 @@ function SeriesHistorySelect({
                 getDisplayName(s.siteIntegrationId) ?? s.siteIntegrationId
               return (
                 <SelectItem key={key} value={key}>
-                  <span data-series-title>{s.seriesTitle || s.seriesId}</span>{" "}
+                  <span data-series-title>{s.seriesTitle}</span>{" "}
                   <span data-series-site>({siteName})</span>
                 </SelectItem>
               )

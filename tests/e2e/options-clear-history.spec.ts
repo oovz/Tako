@@ -171,6 +171,36 @@ async function readDialogTravel(
 }
 
 test.describe("Options Downloads history management", () => {
+  test("loads Options and clears chapter history for a series with an empty title", async ({
+    page,
+    context,
+    extensionId,
+  }) => {
+    const record = { ...chapterRecord(), seriesTitle: "" }
+    await setDownloadedChapterHistory(context, [record])
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=activity`
+    )
+
+    const clearSeries = page.getByRole("button", {
+      name: "Clear series chapter history",
+      exact: true,
+    })
+    await expect(clearSeries).toBeEnabled()
+    await clearSeries.click()
+    const dialog = page.getByRole("dialog", {
+      name: "Clear series chapter history",
+    })
+    await dialog.getByRole("combobox").click()
+    await page
+      .getByRole("option", { name: `${record.seriesId} (MangaDex)` })
+      .click()
+    await dialog.getByRole("button", { name: "Clear Selected" }).click()
+
+    await expect(dialog).toBeHidden()
+    await expect(clearSeries).toBeDisabled()
+  })
+
   test("clearing task history preserves chapter history and current work", async ({
     page,
     extensionId,

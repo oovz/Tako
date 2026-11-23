@@ -88,7 +88,7 @@ export class OptionsConfigurationService {
         .map((entry) => ({
           siteIntegrationId: entry.siteIntegrationId,
           seriesId: entry.seriesId,
-          seriesTitle: entry.seriesTitle,
+          seriesTitle: entry.seriesTitle || entry.seriesId,
           chapterCount: entry.downloadedChapters.length,
         }))
         .sort((left, right) =>
