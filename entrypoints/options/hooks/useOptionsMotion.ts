@@ -57,7 +57,13 @@ export function useOptionsIndicator<Element extends HTMLElement = HTMLElement>(
         height: bounds.height + "px",
       })
       container.dataset.indicatorReady = "true"
-      if (!animate || !ready || !allowsMotion()) return
+      if (
+        !animate ||
+        !ready ||
+        !allowsMotion() ||
+        container.querySelector(":focus-visible")
+      )
+        return
       const to = indicator.getBoundingClientRect()
       animation.current = indicator.animate(
         [

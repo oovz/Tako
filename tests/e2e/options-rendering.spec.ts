@@ -300,7 +300,27 @@ test("keeps moving selection surfaces aligned after rapid changes and responsive
     }
   })
   expect(feedback).toEqual({ checked: "true", moving: true })
-  await page.getByRole("radio", { name: "Error", exact: true }).press("Space")
+  const error = page.getByRole("radio", { name: "Error", exact: true })
+  await error.evaluate((button) => {
+    button.addEventListener(
+      "keydown",
+      () => {
+        requestAnimationFrame(() => {
+          const indicator = button
+            .closest('[role="radiogroup"]')!
+            .querySelector(".options-indicator")!
+          button.setAttribute(
+            "data-indicator-movement",
+            String(indicator.getAnimations().length)
+          )
+        })
+      },
+      { once: true }
+    )
+  })
+  await error.press("Space")
+  await expect(error).toBeChecked()
+  await expect(error).toHaveAttribute("data-indicator-movement", "0")
   await info.press("Space")
   await expect(info).toBeChecked()
   await expect(info).toBeFocused()

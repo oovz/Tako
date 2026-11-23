@@ -208,16 +208,14 @@ function OptionsWorkspace({
               aria-labelledby={`options-${activeSection}-heading`}
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
-                <div className="options-section-enter">
-                  {activeSection === "diagnostics" ? (
-                    <DiagnosticsTab />
-                  ) : state.settingsBuffer ? (
-                    <OptionsTabContent
-                      state={{ ...state, settingsBuffer: state.settingsBuffer }}
-                      activeSection={activeSection}
-                    />
-                  ) : null}
-                </div>
+                {activeSection === "diagnostics" ? (
+                  <DiagnosticsTab />
+                ) : state.settingsBuffer ? (
+                  <OptionsTabContent
+                    state={{ ...state, settingsBuffer: state.settingsBuffer }}
+                    activeSection={activeSection}
+                  />
+                ) : null}
               </Suspense>
             </section>
           </div>

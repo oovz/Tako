@@ -2,7 +2,7 @@
   --options-feedback: 115ms;
   --options-switch: 165ms;
   --options-disclosure: 215ms;
-  --options-ease: cubic-bezier(0.2, 0, 0, 1);
+  --options-ease: var(--ease-settle);
 }
 .options-navigation,
 .options-choices {
@@ -51,9 +51,6 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-tako-motion="reduce"]) .tako-options .options-section-enter {
-    animation: options-section-in var(--options-switch) var(--options-ease);
-  }
   html:not([data-tako-motion="reduce"])
     .tako-options
     :is(
@@ -66,9 +63,6 @@
       color var(--options-feedback) ease,
       background-color var(--options-feedback) ease,
       border-color var(--options-feedback) ease;
-  }
-  html:not([data-tako-motion="reduce"]) .tako-options .settings-choice:active {
-    scale: 1;
   }
   html:not([data-tako-motion="reduce"]) .tako-options [role="switch"] > span,
   html:not([data-tako-motion="reduce"])
@@ -95,23 +89,14 @@
   html:not([data-tako-motion="reduce"])
     .tako-options
     .options-folder-setup-choice {
-    animation: options-folder-setup-choice-in 320ms var(--options-ease);
+    animation: options-folder-setup-choice-in var(--options-disclosure)
+      var(--options-ease);
   }
 }
 @keyframes options-folder-setup-choice-in {
   from {
     opacity: 0.55;
     transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes options-section-in {
-  from {
-    opacity: 0.72;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -279,9 +264,8 @@
   max-width: 1120px;
 }
 .options-save-bar button {
-  height: 36px;
-  min-height: 36px;
   font-size: 13px;
+  line-height: normal;
   border-radius: 7px;
 }
 .options-save-bar [class*="text-sm"] {
@@ -475,7 +459,7 @@
   position: relative;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-columns: minmax(min-content, 1fr);
   gap: 8px;
   margin-top: 24px;
   padding: 0 0 18px;
@@ -497,13 +481,15 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  white-space: nowrap;
+  text-align: center;
 }
 .options-request-step:first-child {
   align-items: start;
+  text-align: start;
 }
 .options-request-step:last-child:not(:first-child) {
   align-items: end;
+  text-align: end;
 }
 .options-request-dot {
   width: 9px;

@@ -33,9 +33,14 @@
       border: 3px solid #e2e8f0;
       border-top: 3px solid #171717;
       border-radius: 50%;
-      animation: spin 1s linear infinite;
     }
-    
+
+    @media (prefers-reduced-motion: no-preference) {
+      .loading-spinner {
+        animation: spin 1s linear infinite;
+      }
+    }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
