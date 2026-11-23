@@ -54,6 +54,10 @@ function PanelContent() {
   if (!data.isLoading && knownManga !== recognizedManga)
     setKnownManga(recognizedManga)
   const contextNotice = resolveSeriesCardMessage(data.blockingMessage)
+  const notice = !hasManga ? (contextNotice?.description ?? null) : null
+  const [knownNotice, setKnownNotice] = useState<string | null>(null)
+  if (!data.isLoading && knownNotice !== notice) setKnownNotice(notice)
+  const introText = hasManga ? null : data.isLoading ? knownNotice : notice
   const available = queue.status === "ready" || queue.status === "stale"
   const visibleView = view === "manga" && !hasManga ? "queue" : view
   if (visibleView !== view) {
@@ -166,11 +170,8 @@ function PanelContent() {
         >
           <SidePanelQueueRegion
             intro={
-              !hasManga &&
-              !data.isLoading &&
-              contextNotice &&
-              queue.queueView.length === 0 ? (
-                <p className="panel-empty">{contextNotice.description}</p>
+              introText && queue.queueView.length === 0 ? (
+                <p className="panel-empty">{introText}</p>
               ) : null
             }
             queueTasks={queue.queueView}
