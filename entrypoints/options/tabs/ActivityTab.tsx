@@ -17,8 +17,11 @@ import {
 export type { ActivityTabProps } from "./ActivityTab-contract"
 
 export function ActivityTab(props: ActivityTabProps) {
-  const [historyToClear, setHistoryToClear] =
-    useState<ActivityHistoryKind | null>(null)
+  const [historyDialog, setHistoryDialog] = useState<{
+    kind: ActivityHistoryKind
+    open: boolean
+    id: number
+  } | null>(null)
   const state = useDownloadsTabState()
   const seriesHistory = useActivitySeriesHistory(props)
   if (state.isLoading) {
@@ -45,7 +48,13 @@ export function ActivityTab(props: ActivityTabProps) {
       <QueueReadNotice status={state.readStatus} onRetry={state.retryRead} />
       <ActivityTabQueue
         state={state}
-        onClearHistory={() => setHistoryToClear("tasks")}
+        onClearHistory={() =>
+          setHistoryDialog((prev) => ({
+            kind: "tasks",
+            open: true,
+            id: (prev?.id ?? 0) + 1,
+          }))
+        }
       />
       <HistoryBySite series={props.series ?? []} />
       <ActivityTabHistory
@@ -53,13 +62,23 @@ export function ActivityTab(props: ActivityTabProps) {
         seriesHistory={seriesHistory}
         readStatus={state.readStatus}
         historyStorageBytes={state.historyStorageBytes}
-        onClearChapterHistoryRequest={() => setHistoryToClear("chapters")}
+        onClearChapterHistoryRequest={() =>
+          setHistoryDialog((prev) => ({
+            kind: "chapters",
+            open: true,
+            id: (prev?.id ?? 0) + 1,
+          }))
+        }
       />
-      {historyToClear && (
+      {historyDialog && (
         <ActivityTabHistoryConfirmation
-          kind={historyToClear}
-          onClose={() => setHistoryToClear(null)}
-          onConfirm={clearHistory[historyToClear]}
+          key={historyDialog.id}
+          kind={historyDialog.kind}
+          open={historyDialog.open}
+          onClose={() =>
+            setHistoryDialog((prev) => prev && { ...prev, open: false })
+          }
+          onConfirm={clearHistory[historyDialog.kind]}
         />
       )}
     </div>

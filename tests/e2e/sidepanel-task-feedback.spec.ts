@@ -1,6 +1,11 @@
 import type { Locator } from "@playwright/test"
 import { expect, test } from "./fixtures/extension"
 import {
+  expectTransformOriginFromTrigger,
+  readTransformOriginInfo,
+  tooltipContentFor,
+} from "./fixtures/transform-origin"
+import {
   makeChapter,
   makeTask,
   seedGlobalQueue,
@@ -242,4 +247,137 @@ test("a rejected queued cancel keeps its row and can be retried from feedback", 
   )
   await expect(row).toHaveCount(0)
   await expect(following).toBeVisible()
+})
+
+test("a task action tooltip scales from its trigger", async ({
+  context,
+  extensionId,
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await seedGlobalQueue(context, [
+    makeTask({
+      id: "task-tooltip-origin",
+      seriesTitle: "Tooltip origin series",
+      status: "queued",
+      created: Date.now(),
+    }),
+  ])
+  await page.goto(`chrome-extension://${extensionId}/sidepanel.html`)
+  const trigger = page.locator(cancelControl)
+  await expect(trigger).toBeVisible()
+  await expect(page.locator("html")).not.toHaveAttribute("data-tako-motion")
+
+  await trigger.hover()
+  const tooltip = await tooltipContentFor(page, trigger)
+  await expect
+    .poll(() => tooltip.getAttribute("data-state"))
+    .toBe("delayed-open")
+  const origin = await tooltip.evaluate(
+    readTransformOriginInfo,
+    "--radix-tooltip-content-transform-origin"
+  )
+  expectTransformOriginFromTrigger(origin)
+})
+
+test("moving between adjacent task tooltips opens the next one without motion", async ({
+  context,
+  extensionId,
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  const now = Date.now()
+  await seedGlobalQueue(context, [
+    makeTask({
+      id: "task-tooltip-first",
+      seriesTitle: "First queued series",
+      status: "queued",
+      created: now,
+    }),
+    makeTask({
+      id: "task-tooltip-second",
+      seriesTitle: "Second queued series",
+      status: "queued",
+      created: now + 1,
+    }),
+  ])
+  await page.goto(`chrome-extension://${extensionId}/sidepanel.html`)
+  await expect(page.locator("html")).not.toHaveAttribute("data-tako-motion")
+  // Pause enter animations the moment they start so the delayed-open check
+  // cannot race the ~150ms animation finishing before it is observed.
+  await page.evaluate(() => {
+    const host = window as unknown as {
+      __takoTooltipMotion?: { state: string; animations: Animation[] }[]
+    }
+    host.__takoTooltipMotion = []
+    document.addEventListener(
+      "animationstart",
+      (event) => {
+        const target = event.target
+        if (!(target instanceof HTMLElement)) return
+        const state = target.dataset.state
+        if (state !== "delayed-open" && state !== "instant-open") return
+        const animations = target.getAnimations()
+        if (animations.length === 0) return
+        host.__takoTooltipMotion!.push({ state, animations })
+        for (const animation of animations) animation.pause()
+      },
+      true
+    )
+  })
+  const triggers = page.locator(cancelControl)
+  await expect(triggers).toHaveCount(2)
+  const first = triggers.nth(0)
+  const second = triggers.nth(1)
+
+  await first.hover()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __takoTooltipMotion?: { state: string; animations: Animation[] }[]
+            }
+          ).__takoTooltipMotion?.filter(
+            (entry) => entry.state === "delayed-open"
+          ).length ?? 0
+      )
+    )
+    .toBe(1)
+  const firstTooltip = await tooltipContentFor(page, first)
+  await expect
+    .poll(() => firstTooltip.getAttribute("data-state"))
+    .toBe("delayed-open")
+  expect(
+    await firstTooltip.evaluate((element) => element.getAnimations().length)
+  ).toBeGreaterThan(0)
+
+  // Move in steps like a real pointer: a single teleport can land while Radix
+  // still marks the pointer "in transit" through the previous tooltip's grace
+  // polygon, which makes the trigger skip its enter handler entirely.
+  await second.scrollIntoViewIfNeeded()
+  const secondBox = await second.boundingBox()
+  expect(secondBox).not.toBeNull()
+  await page.mouse.move(
+    secondBox!.x + secondBox!.width / 2,
+    secondBox!.y + secondBox!.height / 2,
+    { steps: 8 }
+  )
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("[data-state]")].some(
+          (element) => element.dataset.state === "instant-open"
+        )
+      )
+    )
+    .toBe(true)
+  const instantAnimations = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>(
+      '[role="tooltip"][data-state="instant-open"]'
+    )
+    return content?.getAnimations().length ?? -1
+  })
+  expect(instantAnimations).toBe(0)
 })

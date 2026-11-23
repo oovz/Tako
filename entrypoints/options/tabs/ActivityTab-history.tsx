@@ -119,17 +119,19 @@ const HISTORY_DIALOG_KEYS = {
 }
 export function ActivityTabHistoryConfirmation({
   kind,
+  open,
   onClose,
   onConfirm,
 }: {
   kind: ActivityHistoryKind
+  open: boolean
   onClose: () => void
   onConfirm: () => Promise<boolean>
 }) {
   const keys = HISTORY_DIALOG_KEYS[kind]
   return (
     <ClearHistoryDialog
-      open
+      open={open}
       onOpenChange={(open) => {
         if (!open) onClose()
       }}

@@ -1,4 +1,9 @@
+import type { Page } from "@playwright/test"
 import { test, expect } from "./fixtures/extension"
+import {
+  expectTransformOriginFromTrigger,
+  readTransformOriginInfo,
+} from "./fixtures/transform-origin"
 import {
   seedDownloadQueueState,
   setDownloadedChapterHistory,
@@ -22,6 +27,23 @@ function chapterRecord(): DownloadedChapterRecord {
     seriesTitle: "Series done",
     downloadedAt: Date.now(),
     format: "cbz",
+  }
+}
+
+const LONG_SERIES_TITLE =
+  "The Irregular at Magic High School: Anniversary Anthology Light Novel Edition Volume One"
+
+function longTitleRecord(
+  siteIntegrationId: string,
+  seriesId: string
+): DownloadedChapterRecord {
+  return {
+    ...chapterRecord(),
+    siteIntegrationId,
+    chapterId: `long-${siteIntegrationId}`,
+    url: `https://example.com/long-${siteIntegrationId}`,
+    seriesId,
+    seriesTitle: LONG_SERIES_TITLE,
   }
 }
 
@@ -66,6 +88,86 @@ function makeTask(
       status === "queued" || status === "downloading" ? undefined : now,
     settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
   }
+}
+
+type DialogMotionCapture = {
+  generation: number
+  animations: Animation[]
+}
+
+type DialogMotionHost = Window & {
+  __takoDialogMotion?: DialogMotionCapture
+}
+
+/** Runs inside the page via page.evaluate; keep it self-contained. */
+function captureDialogMotion(role: string): void {
+  const host = window as DialogMotionHost
+  if (host.__takoDialogMotion) return
+  const state: DialogMotionCapture = { generation: 0, animations: [] }
+  host.__takoDialogMotion = state
+  document.addEventListener(
+    "animationstart",
+    (event) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+      if (target.getAttribute("role") !== role) return
+      const animations = target.getAnimations()
+      if (animations.length === 0) return
+      state.generation += 1
+      state.animations = animations
+      for (const animation of animations) animation.pause()
+    },
+    true
+  )
+}
+
+async function armDialogMotion(page: Page, role: string): Promise<void> {
+  await page.evaluate(captureDialogMotion, role)
+}
+
+/**
+ * Reads the armed, already-paused enter/exit animation pair: the content's
+ * center at the first and last frame. Modal motion must be scale/fade only,
+ * so the center cannot move more than a pixel.
+ */
+async function readDialogTravel(
+  page: Page,
+  generation: number
+): Promise<{ animations: number; dx: number; dy: number } | null> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as DialogMotionHost).__takoDialogMotion?.generation ?? 0
+      )
+    )
+    .toBe(generation)
+  return page.evaluate(async () => {
+    const animations =
+      (window as DialogMotionHost).__takoDialogMotion?.animations ?? []
+    const element = (animations[0]?.effect as KeyframeEffect | null)
+      ?.target as Element | null
+    if (!element || animations.length === 0) return null
+    const sample = async (time: number) => {
+      for (const animation of animations) animation.currentTime = time
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      const rect = element.getBoundingClientRect()
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    }
+    const duration = Math.max(
+      ...animations.map(
+        (animation) =>
+          Number(animation.effect?.getComputedTiming().duration) || 0
+      )
+    )
+    const start = await sample(0)
+    const end = await sample(duration)
+    for (const animation of animations) animation.finish()
+    return {
+      animations: animations.length,
+      dx: Math.abs(end.x - start.x),
+      dy: Math.abs(end.y - start.y),
+    }
+  })
 }
 
 test.describe("Options Downloads history management", () => {
@@ -274,6 +376,148 @@ test.describe("Options Downloads history management", () => {
             .downloadedChapters
       )
     ).toEqual([])
+  })
+
+  // "opening" only: this AlertDialog unmounts on close, so no exit animation exists to measure.
+  test("task history alert dialog keeps its content centered while opening and closing", async ({
+    page,
+    extensionId,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
+      { waitUntil: "domcontentloaded" }
+    )
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
+    await seedDownloadQueueState(page, [makeTask("done", "completed")])
+    await page.getByRole("button", { name: /Activity/i }).click()
+    await expect(page.locator("html")).not.toHaveAttribute("data-tako-motion")
+
+    await armDialogMotion(page, "alertdialog")
+    await page
+      .getByRole("button", { name: "Clear task history", exact: true })
+      .click()
+    const dialog = page.getByRole("alertdialog", {
+      name: "Clear task history?",
+    })
+    await expect(dialog).toBeVisible()
+
+    const openTravel = await readDialogTravel(page, 1)
+    expect(openTravel).not.toBeNull()
+    expect(openTravel!.animations).toBeGreaterThan(0)
+    expect(openTravel!.dx).toBeLessThanOrEqual(1)
+    expect(openTravel!.dy).toBeLessThanOrEqual(1)
+
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+    const closeTravel = await readDialogTravel(page, 2)
+    expect(closeTravel).not.toBeNull()
+    expect(closeTravel!.animations).toBeGreaterThan(0)
+    expect(closeTravel!.dx).toBeLessThanOrEqual(1)
+    expect(closeTravel!.dy).toBeLessThanOrEqual(1)
+    await expect(dialog).toHaveCount(0)
+  })
+
+  test("series history dialog keeps its content centered and its select scales from the trigger", async ({
+    page,
+    context,
+    extensionId,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    // Narrow viewport so min-content sizing of the select popper/trigger is
+    // observable: at desktop widths even the unfixed layout fits.
+    await page.setViewportSize({ width: 480, height: 800 })
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
+      { waitUntil: "domcontentloaded" }
+    )
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
+    await seedDownloadQueueState(page, [makeTask("done", "completed")])
+    // One short record plus the same long title on two site integrations so
+    // the select must keep the "(Site)" suffix visible to stay distinguishable.
+    await setDownloadedChapterHistory(context, [
+      chapterRecord(),
+      longTitleRecord("mangadex", "long-title-md"),
+      longTitleRecord("coolmic", "long-title-cm"),
+    ])
+    // History stats load once on mount; reload so the seeded records enable
+    // the series-history row before the dialog is opened.
+    await page.reload()
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText("Series done")).toBeVisible()
+    await expect(page.locator("html")).not.toHaveAttribute("data-tako-motion")
+
+    await armDialogMotion(page, "dialog")
+    await page
+      .getByRole("button", {
+        name: "Clear series chapter history",
+        exact: true,
+      })
+      .click()
+    const dialog = page.getByRole("dialog", {
+      name: "Clear series chapter history",
+    })
+    await expect(dialog).toBeVisible()
+
+    const openTravel = await readDialogTravel(page, 1)
+    expect(openTravel).not.toBeNull()
+    expect(openTravel!.animations).toBeGreaterThan(0)
+    expect(openTravel!.dx).toBeLessThanOrEqual(1)
+    expect(openTravel!.dy).toBeLessThanOrEqual(1)
+
+    await dialog.getByRole("combobox").click()
+    const listbox = page.getByRole("listbox")
+    await expect(listbox).toBeVisible()
+
+    // The popper must stay inside the viewport and the trigger inside the
+    // dialog even with ~100-char titles (regression: popper/trigger used to
+    // size to min-content and overflow both). While the listbox is open Radix
+    // marks the dialog aria-hidden, so address the trigger by id and the
+    // dialog by attribute selector rather than by role.
+    const viewportWidth = page.viewportSize()?.width ?? 0
+    const listboxBox = await listbox.boundingBox()
+    expect(listboxBox).not.toBeNull()
+    expect(listboxBox!.x + listboxBox!.width).toBeLessThanOrEqual(
+      viewportWidth + 0.5
+    )
+    const trigger = page.locator("#series-select")
+    const dialogBox = await page.locator('[role="dialog"]').boundingBox()
+    const triggerBox = await trigger.boundingBox()
+    expect(triggerBox).not.toBeNull()
+    expect(dialogBox).not.toBeNull()
+    expect(triggerBox!.x + triggerBox!.width).toBeLessThanOrEqual(
+      dialogBox!.x + dialogBox!.width + 0.5
+    )
+
+    const origin = await listbox.evaluate(
+      readTransformOriginInfo,
+      "--radix-select-content-transform-origin"
+    )
+    expectTransformOriginFromTrigger(origin)
+
+    // The selected value keeps its site suffix so same-title series on
+    // different integrations remain distinguishable in the trigger.
+    // Choosing an option closes the listbox, so the dialog is interactive again.
+    await listbox.getByRole("option", { name: /\(Coolmic\)/ }).click()
+    const site = trigger.locator("[data-series-site]")
+    await expect(site).toHaveText("(Coolmic)")
+    const siteBox = await site.boundingBox()
+    const valueBox = await trigger
+      .locator(":scope > span")
+      .first()
+      .boundingBox()
+    expect(siteBox).not.toBeNull()
+    expect(valueBox).not.toBeNull()
+    expect(siteBox!.x + siteBox!.width).toBeLessThanOrEqual(
+      valueBox!.x + valueBox!.width + 0.5
+    )
+
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+    const closeTravel = await readDialogTravel(page, 2)
+    expect(closeTravel).not.toBeNull()
+    expect(closeTravel!.animations).toBeGreaterThan(0)
+    expect(closeTravel!.dx).toBeLessThanOrEqual(1)
+    expect(closeTravel!.dy).toBeLessThanOrEqual(1)
+    await expect(dialog).toHaveCount(0)
   })
 
   for (const scope of ["task", "chapter"] as const) {

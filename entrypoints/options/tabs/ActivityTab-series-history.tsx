@@ -168,7 +168,10 @@ function SeriesHistorySelect({
     <div className="flex flex-col gap-3 py-3">
       <Label htmlFor="series-select">{t("options_selectSeries")}</Label>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger id="series-select">
+        <SelectTrigger
+          id="series-select"
+          className="[&>span]:flex [&>span]:gap-1 [&_[data-series-title]]:min-w-0 [&_[data-series-title]]:truncate [&_[data-series-site]]:shrink-0"
+        >
           <SelectValue placeholder={t("options_chooseSeries")} />
         </SelectTrigger>
         <SelectContent>
@@ -183,7 +186,8 @@ function SeriesHistorySelect({
                 getDisplayName(s.siteIntegrationId) ?? s.siteIntegrationId
               return (
                 <SelectItem key={key} value={key}>
-                  {s.seriesTitle || s.seriesId} ({siteName})
+                  <span data-series-title>{s.seriesTitle || s.seriesId}</span>{" "}
+                  <span data-series-site>({siteName})</span>
                 </SelectItem>
               )
             })

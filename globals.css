@@ -80,6 +80,7 @@
   --sidebar-border: #e5e5e5;
   --sidebar-ring: #0a0a0a;
   --radius: 0.5rem;
+  --ease-settle: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @layer base {
@@ -171,59 +172,7 @@ html[data-tako-motion="reduce"] *::after {
   transition-duration: 0.01ms !important;
 }
 
-/* UI/UX Enhancement: Apple HIG & Motion Design utilities */
 @layer utilities {
-  /* Fade and slide animations */
-  .animate-in {
-    animation: animate-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  .fade-in {
-    --tw-enter-opacity: 0;
-  }
-
-  .slide-in-from-right-4 {
-    --tw-enter-translate-x: 1rem;
-  }
-
-  .slide-in-from-bottom-2 {
-    --tw-enter-translate-y: 0.5rem;
-  }
-
-  .slide-in-from-bottom-4 {
-    --tw-enter-translate-y: 1rem;
-  }
-
-  .duration-150 {
-    animation-duration: 0.15s;
-  }
-
-  .duration-200 {
-    animation-duration: 0.2s;
-  }
-
-  .duration-250 {
-    animation-duration: 0.25s;
-  }
-
-  .duration-300 {
-    animation-duration: 0.3s;
-  }
-
-  @keyframes animate-in {
-    from {
-      opacity: var(--tw-enter-opacity, 1);
-      transform: translate(
-        var(--tw-enter-translate-x, 0),
-        var(--tw-enter-translate-y, 0)
-      );
-    }
-    to {
-      opacity: 1;
-      transform: translate(0, 0);
-    }
-  }
-
   /* Collapsible animations for Radix CollapsibleContent */
   @keyframes collapsible-down {
     from {
@@ -245,44 +194,5 @@ html[data-tako-motion="reduce"] *::after {
       height: 0;
       opacity: 0;
     }
-  }
-
-  .animate-collapsible-down {
-    animation: collapsible-down 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-collapsible-up {
-    animation: collapsible-up 0.2s cubic-bezier(0.4, 0, 1, 1);
-  }
-
-  /* Smooth expand/collapse */
-  .expand-collapse {
-    transition:
-      max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-      opacity 0.2s ease-out;
-    overflow: hidden;
-  }
-
-  .expand-collapse.collapsed {
-    max-height: 0;
-    opacity: 0;
-  }
-
-  .expand-collapse.expanded {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  html:not([data-tako-motion="reduce"]) .settings-choice {
-    transition:
-      background-color 120ms ease-out,
-      border-color 120ms ease-out,
-      scale 200ms cubic-bezier(0.2, 0.8, 0.3, 1.2);
-  }
-
-  html:not([data-tako-motion="reduce"]) .settings-choice:active {
-    scale: 0.975;
-    transition-duration: 70ms;
   }
 }
