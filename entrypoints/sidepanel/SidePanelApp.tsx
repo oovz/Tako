@@ -77,6 +77,7 @@ function PanelContent() {
   const tabs: PanelView[] = hasManga
     ? ["queue", "manga", "recent"]
     : ["queue", "recent"]
+  const selectedTabIndex = tabs.indexOf(visibleView)
   usePanelLayoutMotion(navigation, '[role="tab"]', tabs.join(","))
   const openQueue = () => {
     setView("queue")
@@ -150,6 +151,13 @@ function PanelContent() {
             )}
           </button>
         ))}
+        <span
+          className="panel-tab-indicator"
+          aria-hidden="true"
+          style={{
+            transform: `translateX(${(selectedTabIndex / tabs.length) * 100}%) scaleX(${1 / tabs.length})`,
+          }}
+        />
       </nav>
       {hasManga && (mangaPending || mangaError) && (
         <span id="manga-tab-status" className="sr-only">

@@ -1,13 +1,12 @@
 .queue-panel-notice {
   --queue-notice-duration: 175ms;
-  --queue-notice-easing: cubic-bezier(0.3, 0, 1, 1);
+  --queue-notice-easing: var(--settle);
   display: grid;
   flex: none;
   grid-template-rows: 0fr;
 }
 .queue-panel-notice[data-open="true"] {
   --queue-notice-duration: 240ms;
-  --queue-notice-easing: var(--settle);
   grid-template-rows: 1fr;
 }
 .queue-panel-notice-clip {

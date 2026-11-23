@@ -230,10 +230,36 @@ test("approved panel: durable queue controls, conditional Manga, selection revie
     }
   }
   await sp.setViewportSize({ width: 360, height: 800 })
+  await sp.emulateMedia({ reducedMotion: "no-preference" })
+  await expect(sp.locator("html")).not.toHaveAttribute("data-tako-motion")
   await sp.getByRole("checkbox", { name: "Select all", exact: true }).click()
+  await sp.evaluate(() => {
+    document.addEventListener("animationstart", (event) => {
+      const sheet = event.target
+      if (
+        !(sheet instanceof HTMLElement) ||
+        !sheet.matches('[role="dialog"][data-state="open"]') ||
+        !sheet
+          .getAnimations()
+          .some((animation) =>
+            (animation.effect as KeyframeEffect | null)
+              ?.getKeyframes()
+              .some(
+                (frame) =>
+                  typeof frame.transform === "string" &&
+                  frame.transform.includes("translateY")
+              )
+          )
+      ) {
+        return
+      }
+      sheet.dataset.openingMotion = "observed"
+    })
+  })
   await sp.getByRole("button", { name: "Review selection" }).click()
   const sheet = sp.getByRole("dialog")
   await expect(sheet).toBeVisible()
+  await expect(sheet).toHaveAttribute("data-opening-motion", "observed")
   const chapter = sheet.getByRole("checkbox", {
     name: chapterTitle + " — 1",
     exact: true,
@@ -266,6 +292,13 @@ test("approved panel: durable queue controls, conditional Manga, selection revie
   await expect(
     sp.getByRole("checkbox", { name: "Select all", exact: true })
   ).toBeFocused()
+
+  await sp.emulateMedia({ reducedMotion: "reduce" })
+  await sp.getByRole("checkbox", { name: "Select all", exact: true }).click()
+  await sp.getByRole("button", { name: "Review selection" }).click()
+  await expect(sheet).toHaveCSS("animation-name", "none")
+  await sheet.getByRole("button", { name: "Close review", exact: true }).click()
+  await expect(sheet).toHaveCount(0)
 
   await setDownloadedChapterHistory(
     context,

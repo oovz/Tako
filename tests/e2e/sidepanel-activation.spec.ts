@@ -431,17 +431,12 @@ test.describe("Side Panel activation", () => {
     await sp.emulateMedia({ reducedMotion: "no-preference" })
     await mangaTab.click()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible()
-    await queuePanel.evaluate((node) => {
-      node.addEventListener("animationstart", (event) => {
-        if (event.target === node)
-          node.setAttribute("data-entrance-observed", "")
-      })
-    })
 
     await unsupportedPage.bringToFront()
     await expect(queueTab).toBeVisible()
     await expect(mangaTab).toHaveCount(0)
-    await expect(queuePanel).toHaveAttribute("data-entrance-observed", "")
+    // Views render immediately: no entrance animation even under no-preference.
+    await expect(queuePanel).toHaveCSS("animation-name", "none")
     expect(await panelContexts()).toEqual([panel])
 
     await supportedPage.bringToFront()
@@ -496,6 +491,201 @@ test.describe("Side Panel activation", () => {
     })
     await expect(disabledNoChaptersButton).toBeVisible()
     await expect(disabledNoChaptersButton).toBeDisabled()
+
+    await sp.close()
+  })
+
+  test("sliding tab indicator tracks pointer and keyboard selection", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    test.setTimeout(90_000)
+    await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
+    await page.bringToFront()
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await sp.emulateMedia({ reducedMotion: "no-preference" })
+    await expect(sp.locator("html")).not.toHaveAttribute("data-tako-motion")
+
+    const measure = () =>
+      sp.evaluate(() => {
+        const indicator = document.querySelector(".panel-tab-indicator")
+        const selected = document.querySelector(
+          '[role="tab"][aria-selected="true"]'
+        )
+        if (!indicator || !selected) return null
+        const i = indicator.getBoundingClientRect()
+        const b = selected.getBoundingClientRect()
+        return {
+          aligned:
+            Math.abs(i.left - b.left) <= 1 &&
+            Math.abs(i.right - b.right) <= 1 &&
+            Math.abs(i.bottom - b.bottom) <= 1,
+          running: indicator
+            .getAnimations()
+            .some(
+              (a) =>
+                a instanceof CSSTransition &&
+                a.transitionProperty === "transform" &&
+                a.playState === "running"
+            ),
+        }
+      })
+
+    // Arm a transitionrun counter so a finished transition is still observed.
+    await sp.evaluate(() => {
+      const w = window as unknown as { __indRuns?: number }
+      w.__indRuns = 0
+      document
+        .querySelector(".panel-tab-indicator")
+        ?.addEventListener("transitionrun", (event) => {
+          if ((event as TransitionEvent).propertyName === "transform")
+            w.__indRuns = (w.__indRuns ?? 0) + 1
+        })
+    })
+
+    // (a) Pointer selection animates the indicator, then aligns.
+    await sp.getByRole("tab", { name: "Recent", exact: true }).click()
+    await expect
+      .poll(async () =>
+        sp.evaluate(
+          () => (window as unknown as { __indRuns?: number }).__indRuns ?? 0
+        )
+      )
+      .toBeGreaterThan(0)
+    await expect
+      .poll(async () => (await measure())?.running ?? true)
+      .toBe(false)
+    expect((await measure())?.aligned).toBe(true)
+
+    // (b) Keyboard selection snaps: no animation on the next frame.
+    await sp.getByRole("tab", { name: "Recent", exact: true }).focus()
+    await sp.keyboard.press("ArrowLeft")
+    const animationsNextFrame = await sp.evaluate(
+      () =>
+        new Promise<number>((resolve) =>
+          requestAnimationFrame(() =>
+            resolve(
+              document.querySelector(".panel-tab-indicator")?.getAnimations()
+                .length ?? -1
+            )
+          )
+        )
+    )
+    expect(animationsNextFrame).toBe(0)
+    await expect
+      .poll(async () => (await measure())?.aligned ?? false)
+      .toBe(true)
+
+    // (d) Reduced motion: selection stays aligned with no running animation.
+    await sp.emulateMedia({ reducedMotion: "reduce" })
+    await expect
+      .poll(() =>
+        sp.evaluate(
+          () => matchMedia("(prefers-reduced-motion: reduce)").matches
+        )
+      )
+      .toBe(true)
+    await sp.getByRole("tab", { name: "Recent", exact: true }).click()
+    // The base stylesheet gives every element a ~0.01ms `transition: all`
+    // fallback; only a real (>=50ms) running animation counts as motion.
+    const reduceAnimations = await sp.evaluate(
+      () =>
+        new Promise<number>((resolve) =>
+          requestAnimationFrame(() =>
+            resolve(
+              document
+                .querySelector(".panel-tab-indicator")
+                ?.getAnimations()
+                .filter(
+                  (a) =>
+                    a.playState === "running" &&
+                    (Number(a.effect?.getComputedTiming().duration) || 0) >= 50
+                ).length ?? -1
+            )
+          )
+        )
+    )
+    expect(reduceAnimations).toBe(0)
+    await expect
+      .poll(async () => (await measure())?.aligned ?? false)
+      .toBe(true)
+
+    await sp.close()
+  })
+
+  test("tab indicator aligns under every tab with Manga present at narrow widths", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    test.setTimeout(90_000)
+    await page.goto(MANGADEX_TEST_SERIES_URL, {
+      waitUntil: "domcontentloaded",
+    })
+    await page.bringToFront()
+    await seedTabContext(
+      page,
+      context,
+      {
+        siteIntegrationId: "mangadex",
+        mangaId: "db692d58-4b13-4174-ae8c-30c515c0689c",
+        seriesTitle: "Hunter x Hunter",
+        chapters: [
+          {
+            id: "chapter-1",
+            url: "https://example.com/ch1",
+            title: "Chapter 1",
+          },
+        ],
+      },
+      MANGADEX_TEST_SERIES_URL
+    )
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await sp.emulateMedia({ reducedMotion: "no-preference" })
+    await expect(
+      sp.getByRole("tab", { name: "Manga", exact: true })
+    ).toBeVisible()
+
+    const measure = () =>
+      sp.evaluate(() => {
+        const indicator = document.querySelector(".panel-tab-indicator")
+        const selected = document.querySelector(
+          '[role="tab"][aria-selected="true"]'
+        )
+        if (!indicator || !selected) return null
+        const i = indicator.getBoundingClientRect()
+        const b = selected.getBoundingClientRect()
+        return {
+          aligned:
+            Math.abs(i.left - b.left) <= 1 &&
+            Math.abs(i.right - b.right) <= 1 &&
+            Math.abs(i.bottom - b.bottom) <= 1,
+        }
+      })
+
+    for (const width of [200, 480]) {
+      await sp.setViewportSize({ width, height: 800 })
+      for (const tab of ["Queue", "Manga", "Recent"]) {
+        await sp.getByRole("tab", { name: tab, exact: true }).click()
+        // Wait out the indicator transition, then check alignment.
+        await expect
+          .poll(async () => {
+            const ind = await sp.evaluate(
+              () =>
+                document
+                  .querySelector(".panel-tab-indicator")
+                  ?.getAnimations()
+                  .filter((a) => a.playState === "running").length ?? 0
+            )
+            return ind
+          })
+          .toBe(0)
+        expect((await measure())?.aligned).toBe(true)
+      }
+    }
 
     await sp.close()
   })

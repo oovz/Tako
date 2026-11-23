@@ -13,7 +13,7 @@
   --muted-foreground: var(--muted);
   --border: var(--line);
   --input: #c7cdd4;
-  --settle: cubic-bezier(0.2, 0, 0, 1);
+  --settle: var(--ease-settle);
   --manga-feedback: 115ms;
   --manga-switch: 165ms;
   --manga-disclosure: 215ms;
@@ -102,11 +102,23 @@
   height: 16px;
 }
 .panel-tabs {
+  --tab-inset: 3px;
+  position: relative;
   display: flex;
   flex: none;
   min-width: 0;
-  padding: 0 3px;
+  padding: 0 var(--tab-inset);
   border-bottom: 1px solid var(--line);
+}
+.panel-tab-indicator {
+  position: absolute;
+  left: var(--tab-inset);
+  right: var(--tab-inset);
+  bottom: 0;
+  height: 2px;
+  background: var(--ink);
+  transform-origin: 0 0;
+  pointer-events: none;
 }
 .panel-tabs > button {
   display: flex;
@@ -127,7 +139,6 @@
 }
 .panel-tabs > button[aria-selected="true"] {
   color: var(--ink);
-  border-bottom-color: var(--ink);
   font-weight: 650;
 }
 .panel-tabs > button:focus-visible {
@@ -733,7 +744,7 @@
     transform: translateY(13px);
     transition:
       transform var(--feedback-close) var(--feedback-exit),
-      opacity 130ms ease-in;
+      opacity 130ms var(--settle);
   }
   html:not([data-tako-motion="reduce"]) .panel-feedback-row button {
     transition:
@@ -1338,21 +1349,8 @@
   background: #f0efeb;
   border-color: #f0efeb;
 }
-.count-wheel {
-  display: inline-grid;
-  position: relative;
-  vertical-align: baseline;
-  overflow: clip;
-  min-width: 1ch;
-  line-height: inherit;
-  text-align: center;
+.download-count {
   font-variant-numeric: tabular-nums;
-}
-.count-outgoing {
-  opacity: 0;
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
 }
 .selection-error {
   padding: 8px 12px;
@@ -1549,7 +1547,7 @@
 
 @container (max-width:300px) {
   .panel-tabs {
-    padding-inline: 3px;
+    padding-inline: var(--tab-inset);
   }
   .panel-status {
     padding-inline: 9px;
@@ -1723,16 +1721,6 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-tako-motion="reduce"]) #panel-view-queue:not([hidden]) {
-    animation: panel-queue-appear 165ms var(--settle);
-  }
-
-  html:not([data-tako-motion="reduce"])
-    .panel-page:not([hidden])
-    :is(.manga-scroll, .recent-list) {
-    animation: panel-appear 135ms var(--settle);
-  }
-
   html:not([data-tako-motion="reduce"]) .manga-volume-toggle > svg {
     transition: transform var(--manga-switch) var(--settle);
   }
@@ -1763,27 +1751,11 @@
       background-color var(--manga-feedback) ease,
       border-color var(--manga-feedback) ease;
   }
-  html:not([data-tako-motion="reduce"]) .batch-actions {
-    transition:
-      grid-template-columns var(--manga-switch) var(--settle),
-      column-gap var(--manga-switch) var(--settle);
-  }
-  html:not([data-tako-motion="reduce"]) .review-slot,
   html:not([data-tako-motion="reduce"]) .check-visual > svg {
     transition: opacity var(--manga-feedback) ease;
   }
   html:not([data-tako-motion="reduce"]) .check-glyph path {
     transition: stroke-dashoffset var(--manga-switch) var(--settle);
-  }
-  html:not([data-tako-motion="reduce"])
-    .count-wheel[data-animate="true"]
-    .count-value {
-    animation: count-in 165ms var(--settle);
-  }
-  html:not([data-tako-motion="reduce"])
-    .count-wheel[data-animate="true"]
-    .count-outgoing {
-    animation: count-out 165ms var(--settle) forwards;
   }
   html:not([data-tako-motion="reduce"]) .selection-review[data-state="open"] {
     animation:
@@ -1792,11 +1764,8 @@
   }
   html:not([data-tako-motion="reduce"]) .selection-review[data-state="closed"] {
     animation:
-      review-close var(--tray-duration) var(--settle),
-      review-fade-out var(--tray-duration) ease;
-  }
-  html:not([data-tako-motion="reduce"]) .selection-review-overlay {
-    animation: panel-appear var(--tray-duration) ease;
+      review-close var(--manga-disclosure) var(--settle),
+      review-fade-out var(--manga-disclosure) ease;
   }
   html:not([data-tako-motion="reduce"]) .ring-value {
     transition: stroke-dashoffset 260ms var(--settle);
@@ -1837,50 +1806,6 @@
     transition-delay: 0s;
   }
 }
-.count-wheel {
-  --count-travel: 85%;
-}
-.count-wheel[data-direction="down"] {
-  --count-travel: -85%;
-}
-@keyframes panel-appear {
-  from {
-    opacity: 0.72;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes panel-queue-appear {
-  from {
-    opacity: 0.72;
-    translate: 0 4px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-@keyframes count-in {
-  from {
-    opacity: 0.65;
-    translate: 0 var(--count-travel);
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-@keyframes count-out {
-  from {
-    opacity: 1;
-    translate: 0 0;
-  }
-  to {
-    opacity: 0;
-    translate: 0 calc(-1 * var(--count-travel));
-  }
-}
 @keyframes review-open {
   from {
     transform: translateY(100%);
@@ -1915,6 +1840,12 @@
     border-color: Highlight;
     color: HighlightText;
   }
+  .panel-tab-indicator {
+    display: none;
+  }
+  .panel-tabs > button[aria-selected="true"] {
+    border-bottom-color: CanvasText;
+  }
 }
 
 .task-actions .lucide-circle-x circle {
@@ -1932,7 +1863,7 @@
   }
   html:not([data-tako-motion="reduce"])
     .selection-review-overlay[data-state="closed"] {
-    animation: review-mask-out var(--tray-duration) ease;
+    animation: review-mask-out var(--manga-disclosure) ease;
   }
 }
 @keyframes review-mask-in {
@@ -1960,6 +1891,14 @@
 @media (prefers-reduced-motion: no-preference) {
   html:not([data-tako-motion="reduce"]) .panel-tabs > [data-view="manga"] {
     animation: manga-tab-appear 145ms var(--settle);
+  }
+  html:not([data-tako-motion="reduce"]) .panel-tab-indicator {
+    transition: transform var(--manga-disclosure) var(--settle);
+  }
+  html:not([data-tako-motion="reduce"])
+    .panel-tabs:has(:focus-visible)
+    > .panel-tab-indicator {
+    transition: none;
   }
 }
 @keyframes manga-tab-appear {

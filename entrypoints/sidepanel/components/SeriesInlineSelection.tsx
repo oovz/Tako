@@ -403,7 +403,7 @@ export function SeriesInlineSelection({
             aria-busy={download.isEnqueuing}
             aria-label={
               selectedCount
-                ? t("sidepanel_downloadCount", [String(selectedCount)])
+                ? t("sidepanel_downloadCount", [selectedCount.toLocaleString()])
                 : t("sidepanel_downloadAction")
             }
             onClick={handleStart}
