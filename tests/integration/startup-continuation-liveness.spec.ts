@@ -42,14 +42,7 @@ describe("startup and watchdog continuation", () => {
     await ensureLivenessAlarm()
     await runtime.expire()
     await runtime.alarm()
-    await vi.waitFor(
-      async () =>
-        expect(await runtime!.queue.getActiveDispatchLease()).toMatchObject({
-          taskId: "queued-successor",
-          documentInstanceId: runtime!.worker.documentInstanceId,
-        }),
-      { interval: 1, timeout: 2_000 }
-    )
+    await waitForSuccessorAdmission(runtime)
     expect(await runtime.queue.getTask(lease.taskId)).toMatchObject({
       status: "failed",
     })
@@ -66,6 +59,7 @@ describe("startup and watchdog continuation", () => {
     const { lease } = await runtime.admitUnbound("unaccepted-task")
     await runtime.enqueue("queued-successor")
     runtime.holdNotifications()
+    runtime.holdProgress()
     await ensureLivenessAlarm()
     await runtime.expire()
     await runtime.alarm()
@@ -92,6 +86,7 @@ describe("startup and watchdog continuation", () => {
     ).toBe(true)
 
     runtime.releaseNotifications()
+    await waitForSuccessorAdmission(runtime)
   })
 })
 
@@ -102,6 +97,18 @@ async function admittedPair() {
   await ensureLivenessAlarm()
   await runtime.expire()
   return { runtime, lease }
+}
+
+async function waitForSuccessorAdmission(current: BackgroundOutputRuntime) {
+  // Keep this fixture alive until the watchdog finishes admitting the successor.
+  await vi.waitFor(
+    async () =>
+      expect(await current.queue.getActiveDispatchLease()).toMatchObject({
+        taskId: "queued-successor",
+        documentInstanceId: current.worker.documentInstanceId,
+      }),
+    { interval: 1, timeout: 2_000 }
+  )
 }
 
 function holdCommittedQueueProjection(current: BackgroundOutputRuntime) {
@@ -139,6 +146,7 @@ describe("unbound recovery publication boundaries", () => {
     const { runtime: current } = await admittedPair()
     const projection = holdCommittedQueueProjection(current)
     try {
+      current.holdProgress()
       await current.alarm()
       await vi.waitFor(() => expect(projection.held()).toBe(true), {
         interval: 1,
@@ -163,9 +171,9 @@ describe("unbound recovery publication boundaries", () => {
       ).toBe(true)
     } finally {
       projection.release()
-      await vi.advanceTimersByTimeAsync(1)
       projection.restore()
     }
+    await waitForSuccessorAdmission(current)
   })
 
   it("admits the successor after the held committed projection resolves", async () => {
@@ -180,14 +188,7 @@ describe("unbound recovery publication boundaries", () => {
       })
       expect(await current.queue.getActiveDispatchLease()).toBeNull()
       projection.release()
-      await vi.waitFor(
-        async () =>
-          expect(await current.queue.getActiveDispatchLease()).toMatchObject({
-            taskId: "queued-successor",
-            documentInstanceId: current.worker.documentInstanceId,
-          }),
-        { interval: 1, timeout: 2_000 }
-      )
+      await waitForSuccessorAdmission(current)
       expect(current.alarms.has(LIVENESS_ALARM_NAME)).toBe(true)
     } finally {
       projection.release()
@@ -269,6 +270,7 @@ describe("unbound recovery publication boundaries", () => {
         await originalSet(values)
       })
     try {
+      current.holdProgress()
       await current.alarm()
       await vi.waitFor(() => expect(held).toBe(true), {
         interval: 1,
@@ -284,9 +286,9 @@ describe("unbound recovery publication boundaries", () => {
       expect(current.alarms.has(LIVENESS_ALARM_NAME)).toBe(true)
     } finally {
       gate.resolve()
-      await vi.advanceTimersByTimeAsync(1)
       spy.mockRestore()
     }
+    await waitForSuccessorAdmission(current)
   })
 })
 
@@ -373,14 +375,7 @@ describe("conservative unbound continuation priming", () => {
       spy.mockRestore()
       runtime.holdProgress()
       await runtime.alarm()
-      await vi.waitFor(
-        async () =>
-          expect(await runtime.queue.getActiveDispatchLease()).toMatchObject({
-            taskId: "queued-successor",
-            documentInstanceId: runtime.worker.documentInstanceId,
-          }),
-        { interval: 1, timeout: 2_000 }
-      )
+      await waitForSuccessorAdmission(runtime)
     } finally {
       spy.mockRestore()
     }
