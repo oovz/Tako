@@ -268,9 +268,6 @@
   "sidepanel_moveTaskToTop": {
     "message": "タスクを先頭に移動"
   },
-  "sidepanel_moreActions": {
-    "message": "その他の操作"
-  },
   "sidepanel_taskRemovedFromQueue": {
     "message": "タスクをキューから削除しました"
   },

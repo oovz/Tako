@@ -8,6 +8,7 @@ import { webcrypto } from "node:crypto"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
 import { CommandCenterTaskActions } from "@/entrypoints/sidepanel/components/CommandCenterTaskActions"
+import { TaskRowFeedback } from "@/entrypoints/sidepanel/components/TaskRowFeedback"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { useCommandCenterActions } from "@/entrypoints/sidepanel/hooks/useCommandCenterActions"
 import { PanelFeedbackProvider } from "@/entrypoints/sidepanel/components/PanelFeedback"
@@ -187,7 +188,7 @@ describe("task actions through mounted components", () => {
     expect(onMoveTaskToTop).toHaveBeenCalledWith("queued")
   })
 
-  it("keeps retry primary and dispatches uncertain restart from the overflow menu", async () => {
+  it("keeps retry primary and dispatches uncertain restart from the feedback panel", async () => {
     const onRetryFailed = vi.fn()
     const onRestartTask = vi.fn()
     const onRemoveTask = vi.fn()
@@ -207,32 +208,35 @@ describe("task actions through mounted components", () => {
       onRestartTask,
       onRemoveTask,
     }
-    await render(createElement(CommandCenterTaskActions, props))
+    const feedbackPanel = (
+      taskActions: ComponentProps<typeof CommandCenterTaskActions>
+    ) =>
+      createElement(TaskRowFeedback, {
+        feedback: {
+          summary: "Some chapters failed",
+          tone: "warning",
+          messages: [],
+        },
+        panelId: "task-feedback-partial",
+        open: true,
+        taskActions,
+        recoveryLinks: [],
+        terminal: true,
+        onClose: vi.fn(),
+      })
+    await render(feedbackPanel(props))
     await click("Retry failed chapters (may create duplicates)")
-    await click("Remove")
+    await click("Dismiss")
     expect(onRetryFailed).toHaveBeenCalledWith("partial")
     expect(onRemoveTask).toHaveBeenCalledWith("partial")
-    await act(async () =>
-      button("More actions").dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
-      )
-    )
-    const restart = document.querySelector('[role="menuitem"]')
-    expect(restart?.textContent).toBe(
-      "Retry all chapters (may create duplicates)"
-    )
-    expect(restart?.getAttribute("aria-disabled")).toBe("true")
-    await act(async () =>
-      restart?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    )
+    const restart = button("Retry all chapters (may create duplicates)")
+    expect(restart.disabled).toBe(true)
+    await act(async () => restart.click())
     expect(onRestartTask).not.toHaveBeenCalled()
-    await render(
-      createElement(CommandCenterTaskActions, { ...props, isRestarting: false })
-    )
-    expect(restart?.getAttribute("aria-disabled")).toBeNull()
-    await act(async () =>
-      restart?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    )
+    await render(feedbackPanel({ ...props, isRestarting: false }))
+    const restartEnabled = button("Retry all chapters (may create duplicates)")
+    expect(restartEnabled.disabled).toBe(false)
+    await act(async () => restartEnabled.click())
     expect(onRestartTask).toHaveBeenCalledWith("partial")
   })
 

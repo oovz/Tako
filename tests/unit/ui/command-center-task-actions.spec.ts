@@ -29,7 +29,7 @@ describe("CommandCenterTaskActions accessibility", () => {
     expect(html).toContain('disabled=""')
   })
 
-  it("renders inline retry and remove with restart in overflow for partial_success", () => {
+  it("renders inline retry and remove for partial_success", () => {
     const html = renderToStaticMarkup(
       React.createElement(
         TooltipProvider,
@@ -56,8 +56,7 @@ describe("CommandCenterTaskActions accessibility", () => {
 
     expect(html.match(/disabled=""/g)).toHaveLength(1)
     expect(html.match(/animate-spin/g)).toHaveLength(1)
-    expect(html).toContain('aria-label="More actions"')
-    expect(html.match(/<button/g)).toHaveLength(3)
+    expect(html.match(/<button/g)).toHaveLength(2)
   })
 
   it("renders inline remove button directly for completed history tasks", () => {
@@ -84,7 +83,6 @@ describe("CommandCenterTaskActions accessibility", () => {
     )
 
     expect(html).toContain('aria-label="Remove"')
-    expect(html).not.toContain('aria-label="More actions"')
     expect(html.match(/<button/g)).toHaveLength(1)
   })
 
@@ -113,7 +111,6 @@ describe("CommandCenterTaskActions accessibility", () => {
 
     expect(html).toContain('aria-label="Move task to top"')
     expect(html).toContain('aria-label="Cancel download"')
-    expect(html).not.toContain('aria-label="More actions"')
     expect(html.match(/<button/g)).toHaveLength(2)
   })
 })

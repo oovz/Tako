@@ -1,7 +1,6 @@
 import {
   ArrowUp,
   Loader2,
-  MoreHorizontal,
   RotateCcw,
   Trash2,
   XCircle,
@@ -10,12 +9,6 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/src/shared/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
@@ -167,7 +160,7 @@ function InlineTaskAction({ action }: { action: TaskActionDescriptor }) {
           variant="ghost"
           size="icon"
           className={cn(
-            "size-6 rounded transition-[color,background-color,scale] duration-150 active:scale-90",
+            "size-6 rounded transition-[color,background-color,scale] duration-150 ease-(--ease-settle) active:scale-95",
             action.destructive
               ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -182,45 +175,6 @@ function InlineTaskAction({ action }: { action: TaskActionDescriptor }) {
         {action.label}
       </TooltipContent>
     </Tooltip>
-  )
-}
-
-function OverflowTaskActions({ actions }: { actions: TaskActionDescriptor[] }) {
-  if (actions.length === 0) return null
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          aria-label={t("sidepanel_moreActions")}
-          variant="ghost"
-          size="icon"
-          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-[color,background-color,scale] duration-150 active:scale-90"
-        >
-          <MoreHorizontal
-            aria-hidden="true"
-            data-icon="inline-start"
-            className="size-3.5"
-          />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.id}
-            disabled={action.pending}
-            className={
-              action.destructive
-                ? "text-destructive focus:text-destructive"
-                : undefined
-            }
-            onSelect={action.invoke}
-          >
-            <TaskActionIcon action={action} />
-            {action.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 
@@ -254,11 +208,6 @@ export function CommandCenterTaskActions(props: CommandCenterTaskActionsProps) {
           action={getTaskActionDescriptor(action, props)}
         />
       ))}
-      <OverflowTaskActions
-        actions={plan.overflow.map((action) =>
-          getTaskActionDescriptor(action, props)
-        )}
-      />
     </div>
   )
 }
